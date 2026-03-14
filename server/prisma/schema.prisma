@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+}
+
+model Category {
+  id       Int       @id @default(autoincrement())
+  name     String
+  products Product[]
+}
+
+model Product {
+  id          Int            @id @default(autoincrement())
+  name        String
+  description String
+  price       Float
+  categoryId  Int
+  isTrending  Boolean        @default(false)
+
+  category    Category       @relation(fields: [categoryId], references: [id])
+  tags        ProductTag[]
+  orderItems  OrderItem[]
+  images      ProductImage[]
+}
+
+
+model ProductImage {
+  id        Int     @id @default(autoincrement())
+  filename  String
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model Tag {
+  id       Int          @id @default(autoincrement())
+  name     String       @unique
+  products ProductTag[]
+}
+
+model ProductTag {
+  productId Int
+  tagId     Int
+
+  product Product @relation(fields: [productId], references: [id])
+  tag     Tag     @relation(fields: [tagId], references: [id])
+
+  @@id([productId, tagId])
+}
+
+model Order {
+  id        Int         @id @default(autoincrement())
+  email     String
+  total     Float
+  status    String
+  createdAt DateTime    @default(now())
+  items     OrderItem[]
+}
+
+model OrderItem {
+  id        Int     @id @default(autoincrement())
+  orderId   Int
+  productId Int
+  quantity  Int
+  price     Float
+
+  order   Order   @relation(fields: [orderId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+}

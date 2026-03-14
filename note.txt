@@ -1,0 +1,40 @@
+<-- UPLOAD PRODUKTU, Z TERMINALA -->
+
+curl -X POST http://localhost:3000/products \
+-H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbklkIjoxLCJlbWFpbCI6ImFkbWluQHRlc3QucGwiLCJpYXQiOjE3NzMxNTE5NTIsImV4cCI6MTc3Mzc1Njc1Mn0.OnaGiar3cVJOoCMvKYnHwJ1g3nMR63fsZ02JoPCQKcE" \
+-F "name=Nike Air" \
+-F "description=Buty sportowe" \
+-F "price=299.99" \
+-F "categoryId=1" \
+-F "image=@nike_air_max.jpg"
+
+http://localhost:5174/ - link do sklepu
+
+<-- UPLOAD PRODUKTU, NOWY -->
+
+curl -X POST http://localhost:3000/products \
+-H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbklkIjoxLCJlbWFpbCI6ImFkbWluQHRlc3QucGwiLCJpYXQiOjE3NzMxNTE5NTIsImV4cCI6MTc3Mzc1Njc1Mn0.OnaGiar3cVJOoCMvKYnHwJ1g3nMR63fsZ02JoPCQKcE" \
+-F "name=Atlanta Rap" \
+-F "description=Rap scene" \
+-F "price=1599,99" \
+-F "categoryId=2" \
+-F "images=@/Applications/XAMPP/xamppfiles/htdocs/shop-app/server/pictures/carti1.jpg" \
+-F "images=@/Applications/XAMPP/xamppfiles/htdocs/shop-app/server/pictures/future1.jpg" \
+-F "images=@/Applications/XAMPP/xamppfiles/htdocs/shop-app/server/pictures/thugger1.jpg"
+
+curl -X POST http://localhost:3000/products \
+-H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbklkIjoxLCJlbWFpbCI6ImFkbWluQHRlc3QucGwiLCJpYXQiOjE3NzMxNTE5NTIsImV4cCI6MTc3Mzc1Njc1Mn0.OnaGiar3cVJOoCMvKYnHwJ1g3nMR63fsZ02JoPCQKcE" \
+-F "name=Nike Air" \
+-F "description=Buty sportowe" \
+-F "price=299.99" \
+-F "categoryId=1" \
+-F "images=@/Applications/XAMPP/xamppfiles/htdocs/shop-app/server/pictures/nike1.jpg" \
+-F "images=@/Applications/XAMPP/xamppfiles/htdocs/shop-app/server/pictures/nike2.jpg" \
+-F "images=@/Applications/XAMPP/xamppfiles/htdocs/shop-app/server/pictures/nike3.jpg" 
+
+
+<-- UPLOAD KATEGORII -->
+curl -X POST http://localhost:3000/categories \
+-H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbklkIjoxLCJlbWFpbCI6ImFkbWluQHRlc3QucGwiLCJpYXQiOjE3NzMxNTE5NTIsImV4cCI6MTc3Mzc1Njc1Mn0.OnaGiar3cVJOoCMvKYnHwJ1g3nMR63fsZ02JoPCQKcE" \
+-H "Content-Type: application/json" \
+-d '{"name":"Rap"}'
