@@ -1,14 +1,13 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import { CartProvider } from "./context/CartContext";
-import "./styles/responsive.css"
+import AdminPanel from "./admin/AdminPanel";
+import "./index.css";
 
+const isAdminRoute = window.location.pathname.startsWith("/admin");
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <CartProvider>
-      <App />
-    </CartProvider>
+    {isAdminRoute ? <AdminPanel /> : <App />}
   </React.StrictMode>
 );

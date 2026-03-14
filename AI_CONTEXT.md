@@ -1,55 +1,63 @@
-PROJECT: Shop App
+PROJEKT: Shop App
+
+REPOZYTORIUM
+https://github.com/r0ckstarrinhoe/shop-app
 
 STACK
 Frontend: React (Vite)
 Backend: Express
 ORM: Prisma
-Database: MySQL
+Database: MySQL (XAMPP)
 Auth: JWT
 Uploads: Multer
 
-PORTS
-Frontend: 5173
-Backend: 3000
-Database: 3306
+PORTY
+Frontend: http://localhost:5173
+Backend: http://localhost:3000
+Database: localhost:3306
 
-FOLDERS
-client/ → React frontend
-server/ → Express backend
-server/prisma/ → database schema
-server/uploads/ → product images
+STRUKTURA
+shop-app/
+  client/ → React frontend
+  server/ → Express backend
+  server/prisma → schema bazy
+  server/uploads → zdjęcia produktów
 
-FEATURES
-- product listing
-- categories sidebar
-- product gallery
-- cart with quantity
-- trending products
-- admin login
-- upload multiple product images
+FUNKCJE
+- lista produktów
+- kategorie po lewej stronie
+- strona produktu z galerią zdjęć
+- koszyk z ilością produktów
+- trendujące produkty
+- upload wielu zdjęć produktu
+- admin login JWT
 
-MAIN API
+API
+
+Produkty
 GET /products
 GET /products/:id
 GET /products/trending
 GET /products/category/:id
 GET /products/search/:text
 
-ADMIN API
+Kategorie
+GET /categories
+POST /categories
+
+Admin
 POST /admin/register
 POST /admin/login
+
+Produkty admin
 POST /products
 PUT /products/:id
 DELETE /products/:id
 
-DATABASE MODELS
-Product
-Category
-ProductImage
-Order
-OrderItem
-
 WORKFLOW
 git add .
-git commit -m "description"
+git commit -m "opis zmiany"
 git push
+
+ZASADA W CZACIE
+odpowiedzi mają zawierać całe pliki do podmiany
