@@ -91,6 +91,7 @@ function extractImageUrl(req, value) {
   if (typeof value === "object") {
     return (
       toAbsoluteUrl(req, value.url) ||
+      toAbsoluteUrl(req, value.filename ? `/uploads/${value.filename}` : null) ||
       toAbsoluteUrl(req, value.image) ||
       toAbsoluteUrl(req, value.src) ||
       toAbsoluteUrl(req, value.path) ||
@@ -110,11 +111,18 @@ function normalizeProduct(product, req) {
 
   const relationImages = Array.isArray(product.images)
     ? product.images
-        .map((img) => ({
-          ...img,
-          url: extractImageUrl(req, img),
-        }))
-        .filter((img) => img.url)
+        .map((img, index) => {
+          const imageUrl = extractImageUrl(req, img)
+          if (!imageUrl) return null
+
+          return {
+            id: img.id ?? `generated-${product.id}-${index}`,
+            filename: img.filename ?? null,
+            productId: img.productId ?? product.id,
+            url: imageUrl,
+          }
+        })
+        .filter(Boolean)
     : []
 
   const relationImageUrls = relationImages.map((img) => img.url)
@@ -145,6 +153,8 @@ function normalizeProduct(product, req) {
         ? relationImages
         : finalGallery.map((url, index) => ({
             id: `generated-${product.id}-${index}`,
+            filename: null,
+            productId: product.id,
             url,
           })),
     image: mainImage,
@@ -486,7 +496,7 @@ app.post("/products", authMiddleware, upload.array("images", 10), async (req, re
     if (req.files && req.files.length > 0) {
       await prisma.productImage.createMany({
         data: req.files.map((file) => ({
-          url: `/uploads/${file.filename}`,
+          filename: file.filename,
           productId: createdProduct.id,
         })),
       })
@@ -581,7 +591,7 @@ app.put("/products/:id", authMiddleware, upload.array("images", 10), async (req,
 
       await prisma.productImage.createMany({
         data: req.files.map((file) => ({
-          url: `/uploads/${file.filename}`,
+          filename: file.filename,
           productId: id,
         })),
       })
