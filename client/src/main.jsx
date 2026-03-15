@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
 import { CartProvider } from "./context/CartContext";
 import "./index.css";
 
@@ -110,9 +111,11 @@ function RootLoader() {
   }
 
   return (
-    <CartProvider>
-      <LoadedComponent />
-    </CartProvider>
+    <BrowserRouter>
+      <CartProvider>
+        <LoadedComponent />
+      </CartProvider>
+    </BrowserRouter>
   );
 }
 

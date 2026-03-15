@@ -1,60 +1,63 @@
-import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
-import Home from "./pages/Home";
-import Shop from "./pages/Shop";
-import Product from "./pages/Product";
-import Cart from "./pages/Cart";
-import { useCart } from "./context/CartContext";
+import { useEffect, useState } from "react";
+import TrendingProducts from "./components/TrendingProducts";
+import ProductCard from "./components/ProductCard";
+import { normalizeProductList } from "./utils/productUtils";
 
-function Navbar(){
+const API_URL = "http://localhost:3000";
 
-  const { cart } = useCart();
-  const count = cart.reduce((sum,p)=>sum+p.quantity,0);
+export default function App() {
+  const [products, setProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [productsError, setProductsError] = useState("");
 
-  return(
+  useEffect(() => {
+    async function loadProducts() {
+      try {
+        setLoadingProducts(true);
+        setProductsError("");
 
-    <nav style={{
-      padding:"20px",
-      borderBottom:"1px solid #ddd",
-      display:"flex",
-      justifyContent:"space-between"
-    }}>
+        const response = await fetch(`${API_URL}/products`);
+        const data = await response.json();
 
-      <Link to="/">Strona główna</Link>
+        if (!response.ok) {
+          throw new Error(data?.message || "Nie udało się pobrać produktów.");
+        }
 
-      <div>
+        setProducts(normalizeProductList(data));
+      } catch (err) {
+        setProductsError(err.message || "Nie udało się pobrać produktów.");
+      } finally {
+        setLoadingProducts(false);
+      }
+    }
 
-        <Link to="/shop" style={{marginRight:"20px"}}>
-          Sklep
-        </Link>
+    loadProducts();
+  }, []);
 
-        <Link to="/cart">
-          Koszyk ({count})
-        </Link>
+  return (
+    <div className="shop-page">
+      <TrendingProducts />
 
-      </div>
+      <section className="all-products-section">
+        <div className="section-header">
+          <h2>Wszystkie produkty</h2>
+        </div>
 
-    </nav>
-  );
-}
+        {loadingProducts ? <p>Ładowanie produktów...</p> : null}
+        {productsError ? <p>{productsError}</p> : null}
 
-export default function App(){
-
-  return(
-
-    <BrowserRouter>
-
-      <Navbar/>
-
-      <Routes>
-
-        <Route path="/" element={<Home/>}/>
-        <Route path="/shop" element={<Shop/>}/>
-        <Route path="/product/:id" element={<Product/>}/>
-        <Route path="/cart" element={<Cart/>}/>
-
-      </Routes>
-
-    </BrowserRouter>
-
+        {!loadingProducts && !productsError ? (
+          products.length ? (
+            <div className="products-grid">
+              {products.map((product) => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </div>
+          ) : (
+            <p>Brak produktów.</p>
+          )
+        ) : null}
+      </section>
+    </div>
   );
 }

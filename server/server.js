@@ -117,28 +117,29 @@ function getImagesFromProduct(product) {
 function mapProduct(product) {
   if (!product) return product;
 
-  const mappedImages = getImagesFromProduct(product)
+  const imageStrings = getImagesFromProduct(product)
     .map((img) => {
       const raw =
         img?.url ||
         img?.path ||
         img?.imageUrl ||
         img?.src ||
+        (typeof img === "string" ? img : "") ||
         (img?.filename ? `/uploads/${img.filename}` : "");
 
-      const absoluteUrl = normalizeImagePath(raw);
-
-      return {
-        id: img?.id,
-        url: absoluteUrl,
-        path: absoluteUrl,
-        imageUrl: absoluteUrl,
-        src: absoluteUrl,
-      };
+      return normalizeImagePath(raw);
     })
-    .filter((img) => img.url);
+    .filter(Boolean);
 
-  const firstImage = mappedImages[0]?.url || "";
+  const imageObjects = imageStrings.map((url, index) => ({
+    id: index + 1,
+    url,
+    path: url,
+    imageUrl: url,
+    src: url,
+  }));
+
+  const firstImage = imageStrings[0] || "";
   const trending = Boolean(product?.trending);
 
   return {
@@ -147,7 +148,9 @@ function mapProduct(product) {
     isTrending: trending,
     image: firstImage,
     thumbnail: firstImage,
-    images: mappedImages,
+    images: imageStrings,
+    gallery: imageStrings,
+    imageObjects,
     categoryName:
       product?.category?.name || product?.categoryName || product?.category_name || "",
   };
