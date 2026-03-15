@@ -38,3 +38,10 @@ curl -X POST http://localhost:3000/categories \
 -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbklkIjoxLCJlbWFpbCI6ImFkbWluQHRlc3QucGwiLCJpYXQiOjE3NzMxNTE5NTIsImV4cCI6MTc3Mzc1Njc1Mn0.OnaGiar3cVJOoCMvKYnHwJ1g3nMR63fsZ02JoPCQKcE" \
 -H "Content-Type: application/json" \
 -d '{"name":"Rap"}'
+
+<-- ADD ADMIN -->
+curl -X POST http://localhost:3000/admin/register \
+-H "Content-Type: application/json" \
+-d '{"email":"admin@test.pl","password":"kurwa"}'
+
+doinstalowalem bcryptjs
