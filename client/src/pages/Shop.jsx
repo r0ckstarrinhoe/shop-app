@@ -16,11 +16,28 @@ export default function Shop(){
 
     async function load(){
 
-      const productsData = await getProducts()
-      const categoriesData = await getCategories()
+      try{
 
-      setProducts(productsData)
-      setCategories(categoriesData)
+        const productsData = await getProducts()
+        const categoriesData = await getCategories()
+
+        setProducts(
+          Array.isArray(productsData)
+            ? productsData.filter(p=>p && p.id)
+            : []
+        )
+
+        setCategories(
+          Array.isArray(categoriesData)
+            ? categoriesData
+            : []
+        )
+
+      }catch(e){
+        console.error("Shop load error",e)
+        setProducts([])
+        setCategories([])
+      }
 
     }
 
@@ -32,12 +49,19 @@ export default function Shop(){
 
     setSelectedCategory(id)
 
-    if(id==="all"){
-      const data = await getProducts()
-      setProducts(data)
-    }else{
-      const data = await getProductsByCategory(id)
-      setProducts(data)
+    try{
+
+      if(id==="all"){
+        const data = await getProducts()
+        setProducts(data.filter(p=>p && p.id))
+      }else{
+        const data = await getProductsByCategory(id)
+        setProducts(data.filter(p=>p && p.id))
+      }
+
+    }catch(e){
+      console.error("Category error",e)
+      setProducts([])
     }
 
   }
@@ -53,8 +77,6 @@ export default function Shop(){
         gridTemplateColumns:"260px 1fr",
         gap:"30px"
       }}>
-
-        {/* SIDEBAR */}
 
         <div style={{
           border:"1px solid #ddd",
@@ -85,8 +107,6 @@ export default function Shop(){
           ))}
 
         </div>
-
-        {/* PRODUKTY */}
 
         <div style={{
           display:"grid",

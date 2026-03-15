@@ -11,9 +11,24 @@ export default function Home() {
   useEffect(()=>{
 
     async function load(){
-      const data = await getTrendingProducts()
-      setProducts(data)
+
+      try{
+
+        const data = await getTrendingProducts()
+
+        if(Array.isArray(data)){
+          setProducts(data.filter(p => p && p.id))
+        }else{
+          setProducts([])
+        }
+
+      }catch(e){
+        console.error("Trending error",e)
+        setProducts([])
+      }
+
       setLoading(false)
+
     }
 
     load()
@@ -23,8 +38,6 @@ export default function Home() {
   return(
 
     <div style={{maxWidth:"1300px",margin:"0 auto",padding:"20px"}}>
-
-      {/* BANNER */}
 
       <div style={{
         background:"#eee",
@@ -57,13 +70,15 @@ export default function Home() {
 
       </div>
 
-      {/* TRENDING */}
-
       <h2 style={{marginBottom:"20px"}}>
         Trendujące produkty
       </h2>
 
       {loading && <p>Ładowanie...</p>}
+
+      {!loading && products.length === 0 && (
+        <p>Brak trendujących produktów</p>
+      )}
 
       <div style={{
         display:"grid",

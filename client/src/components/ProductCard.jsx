@@ -1,77 +1,54 @@
-import { Link } from "react-router-dom";
-import { useCart } from "../context/CartContext";
+import { Link } from "react-router-dom"
+import { useCart } from "../context/CartContext"
 
 export default function ProductCard({ product }) {
 
-  const { addToCart } = useCart();
+  const { addToCart } = useCart()
 
-  const firstImage =
-    product.images && product.images.length > 0
-      ? product.images[0].filename
-      : null;
+  const image = product.image || product.images?.[0]
 
-  return (
+  return(
 
-    <div
-      style={{
-        border: "1px solid #ddd",
-        borderRadius: "12px",
-        overflow: "hidden",
-        background: "#fff",
-        transition: "transform 0.25s ease, box-shadow 0.25s ease",
-        boxShadow: "0 4px 14px rgba(0,0,0,0.06)",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "scale(1.03)";
-        e.currentTarget.style.boxShadow = "0 10px 24px rgba(0,0,0,0.14)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = "scale(1)";
-        e.currentTarget.style.boxShadow = "0 4px 14px rgba(0,0,0,0.06)";
-      }}
-    >
+    <div style={{
+      border:"1px solid #ddd",
+      borderRadius:"10px",
+      overflow:"hidden",
+      background:"#fff",
+      display:"flex",
+      flexDirection:"column"
+    }}>
 
       <Link
         to={`/product/${product.id}`}
-        style={{
-          textDecoration: "none",
-          color: "black",
-          display: "block",
-        }}
+        style={{textDecoration:"none",color:"inherit"}}
       >
 
-        <div
-          style={{
-            width: "100%",
-            height: "220px",
-            background: "#f3f3f3",
-          }}
-        >
+        <div style={{
+          width:"100%",
+          height:"260px",
+          background:"#f3f3f3",
+          display:"flex",
+          alignItems:"center",
+          justifyContent:"center",
+          padding:"10px"
+        }}>
 
-          {firstImage ? (
+          {image ? (
 
             <img
-              src={`http://localhost:3000/uploads/${firstImage}`}
+              src={image}
               alt={product.name}
               style={{
-                width: "100%",
-                height: "220px",
-                objectFit: "cover",
+                height:"100%",
+                width:"auto",
+                maxWidth:"100%",
+                objectFit:"contain"
               }}
             />
 
           ) : (
 
-            <div
-              style={{
-                width: "100%",
-                height: "220px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#666",
-              }}
-            >
+            <div style={{color:"#777"}}>
               Brak zdjęcia
             </div>
 
@@ -79,48 +56,45 @@ export default function ProductCard({ product }) {
 
         </div>
 
-        <div style={{ padding: "12px" }}>
-
-          <h3 style={{ margin: "0 0 8px 0" }}>
-            {product.name}
-          </h3>
-
-          <p style={{ margin: 0, fontWeight: "bold" }}>
-            {product.price} zł
-          </p>
-
-        </div>
-
       </Link>
 
-      <div style={{ padding: "0 12px 12px 12px" }}>
+      <div style={{
+        padding:"14px",
+        display:"flex",
+        flexDirection:"column",
+        gap:"10px",
+        flexGrow:1
+      }}>
+
+        <Link
+          to={`/product/${product.id}`}
+          style={{textDecoration:"none",color:"inherit"}}
+        >
+          <h3 style={{
+            margin:"0",
+            fontSize:"18px"
+          }}>
+            {product.name}
+          </h3>
+        </Link>
+
+        <p style={{
+          margin:0,
+          fontWeight:"bold"
+        }}>
+          {Number(product.price || 0).toFixed(2)} zł
+        </p>
 
         <button
-          onClick={() => addToCart(product)}
+          onClick={()=>addToCart(product)}
           style={{
-            width: "100%",
-            padding: "12px",
-            background: "#000",
-            color: "#fff",
-            border: "none",
-            borderRadius: "8px",
-            cursor: "pointer",
-            fontWeight: "bold",
-            transition: "all 0.2s ease",
-          }}
-          onMouseEnter={(e) => {
-            e.target.style.background = "#222";
-            e.target.style.boxShadow = "0 6px 14px rgba(0,0,0,0.25)";
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.background = "#000";
-            e.target.style.boxShadow = "none";
-          }}
-          onMouseDown={(e) => {
-            e.target.style.transform = "scale(0.96)";
-          }}
-          onMouseUp={(e) => {
-            e.target.style.transform = "scale(1)";
+            marginTop:"auto",
+            padding:"10px",
+            border:"none",
+            borderRadius:"8px",
+            background:"#000",
+            color:"#fff",
+            cursor:"pointer"
           }}
         >
           Dodaj do koszyka
@@ -129,5 +103,7 @@ export default function ProductCard({ product }) {
       </div>
 
     </div>
-  );
+
+  )
+
 }
