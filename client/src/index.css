@@ -462,4 +462,31 @@ img {
   .admin-category-item {
     flex-direction: column;
   }
+
+  
 }
+
+
+.admin-inline-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.admin-category-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+@media (max-width: 700px) {
+  .admin-inline-actions {
+    flex-direction: column;
+  }
+}
+
+.admin-modal-small {
+  max-width: 520px;
+}
+
+

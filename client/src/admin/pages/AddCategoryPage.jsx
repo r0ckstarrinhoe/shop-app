@@ -1,13 +1,21 @@
 import { useState } from "react";
 
-export default function AddCategoryPage({ categories, onCreate, loading }) {
+export default function AddCategoryPage({
+  categories,
+  onCreate,
+  onStartEdit,
+  loading,
+}) {
   const [name, setName] = useState("");
 
   async function handleSubmit(e) {
     e.preventDefault();
 
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
+
     await onCreate({
-      name: name.trim(),
+      name: trimmedName,
     });
 
     setName("");
@@ -17,8 +25,8 @@ export default function AddCategoryPage({ categories, onCreate, loading }) {
     <div className="admin-content-card">
       <div className="admin-page-header">
         <div>
-          <h1>Dodawanie kategorii</h1>
-          <p>Dodaj nową kategorię do sklepu.</p>
+          <h1>Kategorie</h1>
+          <p>Dodawaj nowe kategorie i edytuj istniejące w okienku.</p>
         </div>
       </div>
 
@@ -34,9 +42,11 @@ export default function AddCategoryPage({ categories, onCreate, loading }) {
           />
         </div>
 
-        <button className="admin-btn primary" type="submit" disabled={loading}>
-          {loading ? "Dodawanie..." : "Dodaj kategorię"}
-        </button>
+        <div className="admin-inline-actions">
+          <button className="admin-btn primary" type="submit" disabled={loading}>
+            {loading ? "Dodawanie..." : "Dodaj kategorię"}
+          </button>
+        </div>
       </form>
 
       <div className="admin-subsection">
@@ -48,8 +58,18 @@ export default function AddCategoryPage({ categories, onCreate, loading }) {
           <div className="admin-category-list">
             {categories.map((category) => (
               <div key={category.id} className="admin-category-item">
-                <strong>{category.name}</strong>
-                <span>ID: {category.id}</span>
+                <div className="admin-category-main">
+                  <strong>{category.name}</strong>
+                  <span>ID: {category.id}</span>
+                </div>
+
+                <button
+                  type="button"
+                  className="admin-btn small"
+                  onClick={() => onStartEdit(category)}
+                >
+                  Edytuj
+                </button>
               </div>
             ))}
           </div>

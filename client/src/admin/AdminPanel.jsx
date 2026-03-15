@@ -11,6 +11,7 @@ import {
 import LoginForm from "./components/LoginForm";
 import Sidebar from "./components/Sidebar";
 import EditProductModal from "./components/EditProductModal";
+import EditCategoryModal from "./components/EditCategoryModal";
 import ProductsPage from "./pages/ProductsPage";
 import AddProductPage from "./pages/AddProductPage";
 import AddCategoryPage from "./pages/AddCategoryPage";
@@ -30,6 +31,7 @@ export default function AdminPanel() {
   const [ordersLoading, setOrdersLoading] = useState(false);
 
   const [editingProduct, setEditingProduct] = useState(null);
+  const [editingCategory, setEditingCategory] = useState(null);
   const [ordersError, setOrdersError] = useState("");
 
   const [success, setSuccess] = useState("");
@@ -143,6 +145,30 @@ export default function AdminPanel() {
     }
   }
 
+  async function handleUpdateCategory(categoryId, categoryData) {
+    setCategoryLoading(true);
+    setSuccess("");
+    setError("");
+
+    try {
+      await apiFetch(`/categories/${categoryId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(categoryData),
+      });
+
+      setSuccess("Kategoria została zaktualizowana.");
+      setEditingCategory(null);
+      await loadBaseData();
+    } catch (err) {
+      setError(err.message || "Nie udało się zaktualizować kategorii.");
+    } finally {
+      setCategoryLoading(false);
+    }
+  }
+
   async function handleUpdateProduct(productId, productData) {
     setProductLoading(true);
     setSuccess("");
@@ -181,6 +207,7 @@ export default function AdminPanel() {
     setProducts([]);
     setOrders([]);
     setEditingProduct(null);
+    setEditingCategory(null);
     setSuccess("");
     setError("");
     setOrdersError("");
@@ -223,6 +250,7 @@ export default function AdminPanel() {
           <AddCategoryPage
             categories={categories}
             onCreate={handleCreateCategory}
+            onStartEdit={setEditingCategory}
             loading={categoryLoading}
           />
         ) : null}
@@ -243,6 +271,14 @@ export default function AdminPanel() {
         loading={productLoading}
         onClose={() => setEditingProduct(null)}
         onSave={handleUpdateProduct}
+      />
+
+      <EditCategoryModal
+        open={Boolean(editingCategory)}
+        category={editingCategory}
+        loading={categoryLoading}
+        onClose={() => setEditingCategory(null)}
+        onSave={handleUpdateCategory}
       />
     </div>
   );
