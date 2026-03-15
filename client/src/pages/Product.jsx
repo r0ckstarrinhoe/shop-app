@@ -1,48 +1,92 @@
-import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-import { getProduct } from "../services/api";
-import { useCart } from "../context/CartContext";
+import { useEffect, useState } from "react"
+import { useParams } from "react-router-dom"
+import { getProduct } from "../services/api"
+import { useCart } from "../context/CartContext"
+
+const API_URL = "http://localhost:3000"
+
+function normalizeImageUrl(value) {
+  if (!value) return null
+
+  let imageUrl = null
+
+  if (typeof value === "string") {
+    imageUrl = value
+  } else if (typeof value === "object") {
+    imageUrl = value.url || value.image || value.src || value.path || null
+  }
+
+  if (!imageUrl || typeof imageUrl !== "string") {
+    return null
+  }
+
+  if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+    return imageUrl
+  }
+
+  if (imageUrl.startsWith("/")) {
+    return `${API_URL}${imageUrl}`
+  }
+
+  return `${API_URL}/${imageUrl}`
+}
+
+function getProductImages(product) {
+  if (!product) return []
+
+  if (Array.isArray(product.images) && product.images.length > 0) {
+    return product.images
+      .map((img) => normalizeImageUrl(img))
+      .filter(Boolean)
+  }
+
+  if (Array.isArray(product.gallery) && product.gallery.length > 0) {
+    return product.gallery
+      .map((img) => normalizeImageUrl(img))
+      .filter(Boolean)
+  }
+
+  const singleImage =
+    normalizeImageUrl(product.image) || normalizeImageUrl(product.thumbnail)
+
+  return singleImage ? [singleImage] : []
+}
 
 export default function Product() {
-  const { id } = useParams();
-  const { addToCart } = useCart();
+  const { id } = useParams()
+  const { addToCart } = useCart()
 
-  const [product, setProduct] = useState(null);
-  const [imageIndex, setImageIndex] = useState(0);
+  const [product, setProduct] = useState(null)
+  const [imageIndex, setImageIndex] = useState(0)
 
   useEffect(() => {
     async function load() {
       try {
-        const data = await getProduct(id);
-        setProduct(data);
-        setImageIndex(0);
+        const data = await getProduct(id)
+        setProduct(data)
+        setImageIndex(0)
       } catch (error) {
-        console.error("Błąd ładowania produktu:", error);
-        setProduct(null);
+        console.error("Błąd ładowania produktu:", error)
+        setProduct(null)
       }
     }
 
-    load();
-  }, [id]);
+    load()
+  }, [id])
 
-  if (!product) return <p>Ładowanie...</p>;
+  if (!product) return <p>Ładowanie...</p>
 
-  const image = product.images?.[imageIndex];
+  const images = getProductImages(product)
+  const image = images[imageIndex] || null
 
   function nextImage() {
-    if (!product.images?.length) return;
-
-    setImageIndex((prev) =>
-      prev === product.images.length - 1 ? 0 : prev + 1
-    );
+    if (!images.length) return
+    setImageIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1))
   }
 
   function prevImage() {
-    if (!product.images?.length) return;
-
-    setImageIndex((prev) =>
-      prev === 0 ? product.images.length - 1 : prev - 1
-    );
+    if (!images.length) return
+    setImageIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1))
   }
 
   return (
@@ -82,7 +126,7 @@ export default function Product() {
               />
             ) : null}
 
-            {product.images?.length > 1 ? (
+            {images.length > 1 ? (
               <>
                 <button
                   onClick={prevImage}
@@ -135,7 +179,7 @@ export default function Product() {
               flexWrap: "wrap",
             }}
           >
-            {product.images?.map((img, i) => (
+            {images.map((img, i) => (
               <div
                 key={`${img}-${i}`}
                 onClick={() => setImageIndex(i)}
@@ -191,5 +235,5 @@ export default function Product() {
         </div>
       </div>
     </div>
-  );
+  )
 }

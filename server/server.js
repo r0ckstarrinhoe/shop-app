@@ -1,697 +1,661 @@
-import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-import jwt from "jsonwebtoken";
-import bcrypt from "bcryptjs";
-import multer from "multer";
-import path from "path";
-import fs from "fs";
-import { fileURLToPath } from "url";
-import { PrismaClient } from "@prisma/client";
+import express from "express"
+import cors from "cors"
+import dotenv from "dotenv"
+import path from "path"
+import fs from "fs"
+import bcrypt from "bcrypt"
+import jwt from "jsonwebtoken"
+import multer from "multer"
+import { fileURLToPath } from "url"
+import { PrismaClient } from "@prisma/client"
 
-dotenv.config();
+dotenv.config()
 
-const app = express();
-const prisma = new PrismaClient();
+const app = express()
+const prisma = new PrismaClient()
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
-const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || "supersecretjwtkey";
-const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+const PORT = process.env.PORT || 3000
+const JWT_SECRET = process.env.JWT_SECRET || "secret123"
 
-const uploadsDir = path.join(__dirname, "uploads");
+app.use(cors())
+app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
 
+const uploadsDir = path.join(__dirname, "uploads")
 if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
+  fs.mkdirSync(uploadsDir, { recursive: true })
 }
 
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use("/uploads", express.static(uploadsDir));
+app.use("/uploads", express.static(uploadsDir))
 
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadsDir);
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir)
   },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const safeName = file.originalname.replace(/\s+/g, "-");
-    cb(null, `${uniqueSuffix}-${safeName}`);
+  filename: (req, file, cb) => {
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`
+    cb(null, `${uniqueSuffix}-${file.originalname}`)
   },
-});
+})
 
-const upload = multer({ storage });
+const upload = multer({ storage })
 
 function authMiddleware(req, res, next) {
   try {
-    const authHeader = req.headers.authorization;
+    const authHeader = req.headers.authorization
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ message: "Brak tokena." });
+      return res.status(401).json({ error: "Brak tokena" })
     }
 
-    const token = authHeader.split(" ")[1];
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const token = authHeader.split(" ")[1]
+    const decoded = jwt.verify(token, JWT_SECRET)
 
-    req.admin = decoded;
-    next();
+    req.admin = decoded
+    next()
   } catch (error) {
-    return res.status(401).json({ message: "Nieprawidłowy token." });
+    return res.status(401).json({ error: "Nieprawidłowy token" })
   }
 }
 
-function generateToken(admin) {
-  return jwt.sign(
-    {
-      id: admin.id,
-      email: admin.email,
-    },
-    JWT_SECRET,
-    { expiresIn: "7d" }
-  );
+function getBaseUrl(req) {
+  return `${req.protocol}://${req.get("host")}`
 }
 
-function normalizeImagePath(value) {
-  if (!value || typeof value !== "string") return "";
+function toAbsoluteUrl(req, value) {
+  if (!value) return null
+
+  if (typeof value !== "string") return null
 
   if (value.startsWith("http://") || value.startsWith("https://")) {
-    return value;
-  }
-
-  if (value.startsWith("/uploads/")) {
-    return `${BASE_URL}${value}`;
-  }
-
-  if (value.startsWith("uploads/")) {
-    return `${BASE_URL}/${value}`;
+    return value
   }
 
   if (value.startsWith("/")) {
-    return `${BASE_URL}${value}`;
+    return `${getBaseUrl(req)}${value}`
   }
 
-  return `${BASE_URL}/uploads/${value}`;
+  return `${getBaseUrl(req)}/${value}`
 }
 
-function parseTrendingInput(value, fallback = false) {
-  if (value === undefined || value === null || value === "") return fallback;
-  if (value === true || value === "true" || value === "1" || value === 1 || value === "on") {
-    return true;
-  }
-  if (value === false || value === "false" || value === "0" || value === 0) {
-    return false;
-  }
-  return Boolean(value);
-}
+function extractImageUrl(req, value) {
+  if (!value) return null
 
-function isTrendingValue(value) {
-  return value === true || value === 1 || value === "1" || value === "true";
-}
-
-function toDbTrendingValue(parsedTrending, existingValue) {
-  if (typeof existingValue === "number") {
-    return parsedTrending ? 1 : 0;
+  if (typeof value === "string") {
+    return toAbsoluteUrl(req, value)
   }
 
-  return parsedTrending;
-}
-
-async function getTrendingStorageType() {
-  const sample = await prisma.product.findFirst({
-    select: { trending: true },
-  });
-
-  if (sample && typeof sample.trending === "number") {
-    return "number";
+  if (typeof value === "object") {
+    return (
+      toAbsoluteUrl(req, value.url) ||
+      toAbsoluteUrl(req, value.image) ||
+      toAbsoluteUrl(req, value.src) ||
+      toAbsoluteUrl(req, value.path) ||
+      null
+    )
   }
 
-  return "boolean";
+  return null
 }
 
-function getImagesFromProduct(product) {
-  if (Array.isArray(product?.images)) return product.images;
-  if (Array.isArray(product?.productImages)) return product.productImages;
-  if (Array.isArray(product?.gallery)) return product.gallery;
-  return [];
+function uniqueArray(arr) {
+  return [...new Set(arr.filter(Boolean))]
 }
 
-function mapProduct(product) {
-  if (!product) return product;
+function normalizeProduct(product, req) {
+  if (!product) return product
 
-  const imageStrings = getImagesFromProduct(product)
-    .map((img) => {
-      const raw =
-        img?.url ||
-        img?.path ||
-        img?.imageUrl ||
-        img?.src ||
-        (typeof img === "string" ? img : "") ||
-        (img?.filename ? `/uploads/${img.filename}` : "");
+  const relationImages = Array.isArray(product.images)
+    ? product.images
+        .map((img) => ({
+          ...img,
+          url: extractImageUrl(req, img),
+        }))
+        .filter((img) => img.url)
+    : []
 
-      return normalizeImagePath(raw);
-    })
-    .filter(Boolean);
+  const relationImageUrls = relationImages.map((img) => img.url)
 
-  const firstImage = imageStrings[0] || "";
-  const trending = isTrendingValue(product?.trending);
+  const legacyGallery = Array.isArray(product.gallery)
+    ? product.gallery.map((img) => extractImageUrl(req, img)).filter(Boolean)
+    : []
+
+  const legacyImage =
+    extractImageUrl(req, product.image) ||
+    extractImageUrl(req, product.thumbnail) ||
+    null
+
+  const finalGallery = uniqueArray([
+    ...relationImageUrls,
+    ...legacyGallery,
+    legacyImage,
+  ])
+
+  const mainImage = legacyImage || finalGallery[0] || null
+  const mainThumbnail =
+    extractImageUrl(req, product.thumbnail) || mainImage || null
 
   return {
     ...product,
-    trending,
-    isTrending: trending,
-    image: firstImage,
-    thumbnail: firstImage,
-    images: imageStrings,
-    gallery: imageStrings,
-    categoryName:
-      product?.category?.name || product?.categoryName || product?.category_name || "",
-  };
+    images:
+      relationImages.length > 0
+        ? relationImages
+        : finalGallery.map((url, index) => ({
+            id: `generated-${product.id}-${index}`,
+            url,
+          })),
+    image: mainImage,
+    thumbnail: mainThumbnail,
+    gallery: finalGallery,
+  }
 }
 
-async function ensureDefaultAdmin() {
-  const adminEmail = process.env.ADMIN_EMAIL;
-  const adminPassword = process.env.ADMIN_PASSWORD;
-
-  if (!adminEmail || !adminPassword) return;
-
-  const existingAdmin = await prisma.admin.findUnique({
-    where: { email: adminEmail },
-  });
-
-  if (existingAdmin) return;
-
-  const hashedPassword = await bcrypt.hash(adminPassword, 10);
-
-  await prisma.admin.create({
-    data: {
-      email: adminEmail,
-      password: hashedPassword,
-    },
-  });
-
-  console.log(`Domyślny admin utworzony: ${adminEmail}`);
+function parseIsTrending(value, fallback = false) {
+  if (value === undefined || value === null || value === "") return fallback
+  if (value === true || value === "true" || value === 1 || value === "1") return true
+  return false
 }
 
-/*
-|--------------------------------------------------------------------------
-| Admin
-|--------------------------------------------------------------------------
-*/
+app.get("/", (req, res) => {
+  res.json({ message: "API działa" })
+})
+
+/* =========================
+   ADMIN
+========================= */
 
 app.post("/admin/register", async (req, res) => {
   try {
-    const { email, password } = req.body ?? {};
+    const { email, password } = req.body
 
     if (!email || !password) {
-      return res.status(400).json({ message: "Email i hasło są wymagane." });
+      return res.status(400).json({ error: "Email i hasło są wymagane" })
     }
 
     const existingAdmin = await prisma.admin.findUnique({
       where: { email },
-    });
+    })
 
     if (existingAdmin) {
-      return res.status(400).json({ message: "Admin już istnieje." });
+      return res.status(400).json({ error: "Admin już istnieje" })
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10)
 
     const admin = await prisma.admin.create({
       data: {
         email,
         password: hashedPassword,
       },
-    });
+    })
 
-    return res.status(201).json({
-      token: generateToken(admin),
-      admin: {
-        id: admin.id,
-        email: admin.email,
-      },
-    });
+    res.status(201).json({
+      id: admin.id,
+      email: admin.email,
+      message: "Admin utworzony",
+    })
   } catch (error) {
-    console.error("POST /admin/register error:", error);
-    return res.status(500).json({ message: "Błąd rejestracji admina." });
+    console.error("POST /admin/register error:", error)
+    res.status(500).json({ error: "Błąd rejestracji admina" })
   }
-});
+})
 
 app.post("/admin/login", async (req, res) => {
   try {
-    const { email, password } = req.body ?? {};
+    const { email, password } = req.body
 
     if (!email || !password) {
-      return res.status(400).json({ message: "Email i hasło są wymagane." });
+      return res.status(400).json({ error: "Email i hasło są wymagane" })
     }
 
     const admin = await prisma.admin.findUnique({
       where: { email },
-    });
+    })
 
     if (!admin) {
-      return res.status(401).json({ message: "Nieprawidłowy email lub hasło." });
+      return res.status(401).json({ error: "Nieprawidłowy email lub hasło" })
     }
 
-    const valid = await bcrypt.compare(password, admin.password);
+    const validPassword = await bcrypt.compare(password, admin.password)
 
-    if (!valid) {
-      return res.status(401).json({ message: "Nieprawidłowy email lub hasło." });
+    if (!validPassword) {
+      return res.status(401).json({ error: "Nieprawidłowy email lub hasło" })
     }
 
-    return res.json({
-      token: generateToken(admin),
+    const token = jwt.sign(
+      {
+        id: admin.id,
+        email: admin.email,
+      },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    )
+
+    res.json({
+      token,
       admin: {
         id: admin.id,
         email: admin.email,
       },
-    });
+    })
   } catch (error) {
-    console.error("POST /admin/login error:", error);
-    return res.status(500).json({ message: "Błąd logowania." });
+    console.error("POST /admin/login error:", error)
+    res.status(500).json({ error: "Błąd logowania" })
   }
-});
+})
 
-/*
-|--------------------------------------------------------------------------
-| Kategorie
-|--------------------------------------------------------------------------
-*/
+/* =========================
+   CATEGORIES
+========================= */
 
 app.get("/categories", async (req, res) => {
   try {
     const categories = await prisma.category.findMany({
-      orderBy: { id: "desc" },
-    });
+      orderBy: {
+        id: "desc",
+      },
+    })
 
-    return res.json(categories);
+    res.json(categories)
   } catch (error) {
-    console.error("GET /categories error:", error);
-    return res.status(500).json({ message: "Błąd pobierania kategorii." });
+    console.error("GET /categories error:", error)
+    res.status(500).json({ error: "Błąd pobierania kategorii" })
   }
-});
+})
 
 app.post("/categories", authMiddleware, async (req, res) => {
   try {
-    const { name } = req.body ?? {};
+    const { name } = req.body
 
-    if (!name || !name.trim()) {
-      return res.status(400).json({ message: "Nazwa kategorii jest wymagana." });
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: "Nazwa kategorii jest wymagana" })
     }
 
     const category = await prisma.category.create({
-      data: { name: name.trim() },
-    });
+      data: {
+        name: String(name).trim(),
+      },
+    })
 
-    return res.status(201).json(category);
+    res.status(201).json(category)
   } catch (error) {
-    console.error("POST /categories error:", error);
-    return res.status(500).json({ message: "Błąd dodawania kategorii." });
+    console.error("POST /categories error:", error)
+    res.status(500).json({ error: "Błąd tworzenia kategorii" })
   }
-});
+})
 
 app.put("/categories/:id", authMiddleware, async (req, res) => {
   try {
-    const categoryId = Number(req.params.id);
-    const { name } = req.body ?? {};
+    const id = Number(req.params.id)
+    const { name } = req.body
 
-    if (Number.isNaN(categoryId)) {
-      return res.status(400).json({ message: "Nieprawidłowe ID kategorii." });
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ error: "Nieprawidłowe ID kategorii" })
     }
 
-    if (!name || !name.trim()) {
-      return res.status(400).json({ message: "Nazwa kategorii jest wymagana." });
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: "Nazwa kategorii jest wymagana" })
     }
 
     const updatedCategory = await prisma.category.update({
-      where: { id: categoryId },
-      data: { name: name.trim() },
-    });
+      where: { id },
+      data: {
+        name: String(name).trim(),
+      },
+    })
 
-    return res.json(updatedCategory);
+    res.json(updatedCategory)
   } catch (error) {
-    console.error("PUT /categories/:id error:", error);
-    return res.status(500).json({ message: "Błąd edycji kategorii." });
+    console.error("PUT /categories/:id error:", error)
+    res.status(500).json({ error: "Błąd edycji kategorii" })
   }
-});
+})
 
-/*
-|--------------------------------------------------------------------------
-| Produkty
-|--------------------------------------------------------------------------
-*/
+/* =========================
+   PRODUCTS
+========================= */
 
 app.get("/products", async (req, res) => {
   try {
     const products = await prisma.product.findMany({
       include: {
-        category: true,
         images: true,
+        category: true,
       },
-      orderBy: { id: "desc" },
-    });
+      orderBy: {
+        id: "desc",
+      },
+    })
 
-    return res.json(products.map(mapProduct));
+    res.json(products.map((product) => normalizeProduct(product, req)))
   } catch (error) {
-    console.error("GET /products error:", error);
-    return res.status(500).json({ message: "Błąd pobierania produktów." });
+    console.error("GET /products error:", error)
+    res.status(500).json({ error: "Błąd pobierania produktów" })
   }
-});
+})
 
 app.get("/products/trending", async (req, res) => {
   try {
     const products = await prisma.product.findMany({
-      include: {
-        category: true,
-        images: true,
+      where: {
+        isTrending: true,
       },
-      orderBy: { id: "desc" },
-    });
+      include: {
+        images: true,
+        category: true,
+      },
+      orderBy: {
+        id: "desc",
+      },
+    })
 
-    const trendingProducts = products.filter((product) =>
-      isTrendingValue(product.trending)
-    );
-
-    return res.json(trendingProducts.map(mapProduct));
+    res.json(products.map((product) => normalizeProduct(product, req)))
   } catch (error) {
-    console.error("GET /products/trending error:", error);
-    return res.status(500).json({
-      message: "Błąd pobierania trendujących produktów.",
-      error: error.message,
-    });
+    console.error("GET /products/trending error:", error)
+    res.status(500).json({ error: "Błąd pobierania trendujących produktów" })
   }
-});
+})
 
 app.get("/products/category/:id", async (req, res) => {
   try {
-    const categoryId = Number(req.params.id);
+    const categoryId = Number(req.params.id)
 
     if (Number.isNaN(categoryId)) {
-      return res.status(400).json({ message: "Nieprawidłowe ID kategorii." });
-    }
-
-    const products = await prisma.product.findMany({
-      where: { categoryId },
-      include: {
-        category: true,
-        images: true,
-      },
-      orderBy: { id: "desc" },
-    });
-
-    return res.json(products.map(mapProduct));
-  } catch (error) {
-    console.error("GET /products/category/:id error:", error);
-    return res.status(500).json({ message: "Błąd pobierania produktów kategorii." });
-  }
-});
-
-app.get("/products/search/:text", async (req, res) => {
-  try {
-    const text = req.params.text?.trim();
-
-    if (!text) {
-      return res.json([]);
+      return res.status(400).json({ error: "Nieprawidłowe ID kategorii" })
     }
 
     const products = await prisma.product.findMany({
       where: {
+        category: {
+          id: categoryId,
+        },
+      },
+      include: {
+        images: true,
+        category: true,
+      },
+      orderBy: {
+        id: "desc",
+      },
+    })
+
+    res.json(products.map((product) => normalizeProduct(product, req)))
+  } catch (error) {
+    console.error("GET /products/category/:id error:", error)
+    res.status(500).json({ error: "Błąd pobierania produktów kategorii" })
+  }
+})
+
+app.get("/products/search/:text", async (req, res) => {
+  try {
+    const text = req.params.text || ""
+
+    const products = await prisma.product.findMany({
+      where: {
         OR: [
-          { name: { contains: text } },
-          { description: { contains: text } },
+          {
+            name: {
+              contains: text,
+            },
+          },
+          {
+            description: {
+              contains: text,
+            },
+          },
         ],
       },
       include: {
-        category: true,
         images: true,
+        category: true,
       },
-      orderBy: { id: "desc" },
-    });
+      orderBy: {
+        id: "desc",
+      },
+    })
 
-    return res.json(products.map(mapProduct));
+    res.json(products.map((product) => normalizeProduct(product, req)))
   } catch (error) {
-    console.error("GET /products/search/:text error:", error);
-    return res.status(500).json({ message: "Błąd wyszukiwania produktów." });
+    console.error("GET /products/search/:text error:", error)
+    res.status(500).json({ error: "Błąd wyszukiwania produktów" })
   }
-});
+})
 
 app.get("/products/:id", async (req, res) => {
   try {
-    const productId = Number(req.params.id);
+    const id = Number(req.params.id)
 
-    if (Number.isNaN(productId)) {
-      return res.status(400).json({ message: "Nieprawidłowe ID produktu." });
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ error: "Nieprawidłowe ID produktu" })
     }
 
     const product = await prisma.product.findUnique({
-      where: { id: productId },
+      where: { id },
       include: {
-        category: true,
         images: true,
+        category: true,
       },
-    });
+    })
 
     if (!product) {
-      return res.status(404).json({ message: "Produkt nie istnieje." });
+      return res.status(404).json({ error: "Produkt nie istnieje" })
     }
 
-    return res.json(mapProduct(product));
+    res.json(normalizeProduct(product, req))
   } catch (error) {
-    console.error("GET /products/:id error:", error);
-    return res.status(500).json({ message: "Błąd pobierania produktu." });
+    console.error("GET /products/:id error:", error)
+    res.status(500).json({ error: "Błąd pobierania produktu" })
   }
-});
+})
 
-app.post("/products", authMiddleware, upload.array("images"), async (req, res) => {
+app.post("/products", authMiddleware, upload.array("images", 10), async (req, res) => {
   try {
-    const body = req.body ?? {};
-    const { name, categoryId, description, price } = body;
+    const { name, description, price, categoryId, isTrending, trending } = req.body
 
-    if (!name || !categoryId || !description || !price) {
-      return res.status(400).json({
-        message: "Pola name, categoryId, description i price są wymagane.",
-      });
+    if (!name || price === undefined || price === "" || !categoryId) {
+      return res.status(400).json({ error: "Brakuje wymaganych pól" })
     }
 
-    const parsedCategoryId = Number(categoryId);
-    const parsedPrice = Number(price);
+    const numericPrice = Number(price)
+    const numericCategoryId = Number(categoryId)
 
-    if (Number.isNaN(parsedCategoryId) || Number.isNaN(parsedPrice)) {
-      return res.status(400).json({ message: "Nieprawidłowe categoryId lub price." });
+    if (Number.isNaN(numericPrice) || Number.isNaN(numericCategoryId)) {
+      return res.status(400).json({ error: "Nieprawidłowe dane produktu" })
     }
-
-    const trendingType = await getTrendingStorageType();
-    const parsedTrending = parseTrendingInput(body.trending, false);
-    const dbTrendingValue =
-      trendingType === "number" ? (parsedTrending ? 1 : 0) : parsedTrending;
 
     const createdProduct = await prisma.product.create({
       data: {
-        name: name.trim(),
-        description: description.trim(),
-        price: parsedPrice,
-        categoryId: parsedCategoryId,
-        trending: dbTrendingValue,
+        name: String(name),
+        description: description ? String(description) : "",
+        price: numericPrice,
+        isTrending: parseIsTrending(
+          isTrending !== undefined ? isTrending : trending,
+          false
+        ),
+        category: {
+          connect: {
+            id: numericCategoryId,
+          },
+        },
       },
-    });
+    })
 
-    const files = Array.isArray(req.files) ? req.files : [];
-
-    if (files.length > 0) {
+    if (req.files && req.files.length > 0) {
       await prisma.productImage.createMany({
-        data: files.map((file) => ({
-          productId: createdProduct.id,
+        data: req.files.map((file) => ({
           url: `/uploads/${file.filename}`,
+          productId: createdProduct.id,
         })),
-      });
+      })
     }
 
-    const fullProduct = await prisma.product.findUnique({
+    const product = await prisma.product.findUnique({
       where: { id: createdProduct.id },
       include: {
-        category: true,
         images: true,
+        category: true,
       },
-    });
+    })
 
-    return res.status(201).json(mapProduct(fullProduct));
+    res.status(201).json(normalizeProduct(product, req))
   } catch (error) {
-    console.error("POST /products error:", error);
-    return res.status(500).json({
-      message: "Błąd dodawania produktu.",
-      error: error.message,
-    });
+    console.error("POST /products error:", error)
+    res.status(500).json({ error: error.message || "Błąd tworzenia produktu" })
   }
-});
+})
 
-app.put("/products/:id", authMiddleware, upload.array("images"), async (req, res) => {
+app.put("/products/:id", authMiddleware, upload.array("images", 10), async (req, res) => {
   try {
-    const productId = Number(req.params.id);
+    const id = Number(req.params.id)
 
-    if (Number.isNaN(productId)) {
-      return res.status(400).json({ message: "Nieprawidłowe ID produktu." });
-    }
-
-    const body = req.body ?? {};
-    const { name, categoryId, description, price } = body;
-
-    if (!name || !categoryId || !description || !price) {
-      return res.status(400).json({
-        message: "Pola name, categoryId, description i price są wymagane.",
-      });
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ error: "Nieprawidłowe ID produktu" })
     }
 
     const existingProduct = await prisma.product.findUnique({
-      where: { id: productId },
-    });
+      where: { id },
+      include: {
+        images: true,
+        category: true,
+      },
+    })
 
     if (!existingProduct) {
-      return res.status(404).json({ message: "Produkt nie istnieje." });
+      return res.status(404).json({ error: "Produkt nie istnieje" })
     }
 
-    const parsedCategoryId = Number(categoryId);
-    const parsedPrice = Number(price);
+    const { name, description, price, categoryId, isTrending, trending } = req.body
+    const updateData = {}
 
-    if (Number.isNaN(parsedCategoryId) || Number.isNaN(parsedPrice)) {
-      return res.status(400).json({ message: "Nieprawidłowe categoryId lub price." });
+    if (name !== undefined) {
+      updateData.name = String(name)
     }
 
-    const parsedTrending = parseTrendingInput(
-      body.trending,
-      isTrendingValue(existingProduct.trending)
-    );
+    if (description !== undefined) {
+      updateData.description = String(description)
+    }
 
-    const dbTrendingValue = toDbTrendingValue(
-      parsedTrending,
-      existingProduct.trending
-    );
+    if (price !== undefined && price !== "") {
+      const numericPrice = Number(price)
+
+      if (Number.isNaN(numericPrice)) {
+        return res.status(400).json({ error: "Nieprawidłowa cena" })
+      }
+
+      updateData.price = numericPrice
+    }
+
+    if (isTrending !== undefined || trending !== undefined) {
+      updateData.isTrending = parseIsTrending(
+        isTrending !== undefined ? isTrending : trending,
+        existingProduct.isTrending
+      )
+    }
+
+    if (categoryId !== undefined && categoryId !== "") {
+      const numericCategoryId = Number(categoryId)
+
+      if (Number.isNaN(numericCategoryId)) {
+        return res.status(400).json({ error: "Nieprawidłowa kategoria" })
+      }
+
+      updateData.category = {
+        connect: {
+          id: numericCategoryId,
+        },
+      }
+    }
 
     await prisma.product.update({
-      where: { id: productId },
-      data: {
-        name: name.trim(),
-        description: description.trim(),
-        price: parsedPrice,
-        categoryId: parsedCategoryId,
-        trending: dbTrendingValue,
-      },
-    });
+      where: { id },
+      data: updateData,
+    })
 
-    const files = Array.isArray(req.files) ? req.files : [];
+    if (req.files && req.files.length > 0) {
+      await prisma.productImage.deleteMany({
+        where: { productId: id },
+      })
 
-    if (files.length > 0) {
       await prisma.productImage.createMany({
-        data: files.map((file) => ({
-          productId,
+        data: req.files.map((file) => ({
           url: `/uploads/${file.filename}`,
+          productId: id,
         })),
-      });
+      })
     }
 
     const updatedProduct = await prisma.product.findUnique({
-      where: { id: productId },
+      where: { id },
       include: {
-        category: true,
         images: true,
+        category: true,
       },
-    });
+    })
 
-    return res.json(mapProduct(updatedProduct));
+    res.json(normalizeProduct(updatedProduct, req))
   } catch (error) {
-    console.error("PUT /products/:id error:", error);
-    return res.status(500).json({
-      message: "Błąd edycji produktu.",
-      error: error.message,
-    });
+    console.error("PUT /products/:id error:", error)
+    res.status(500).json({ error: error.message || "Błąd edycji produktu" })
   }
-});
+})
 
 app.delete("/products/:id", authMiddleware, async (req, res) => {
   try {
-    const productId = Number(req.params.id);
+    const id = Number(req.params.id)
 
-    if (Number.isNaN(productId)) {
-      return res.status(400).json({ message: "Nieprawidłowe ID produktu." });
-    }
-
-    const existingProduct = await prisma.product.findUnique({
-      where: { id: productId },
-      include: {
-        images: true,
-      },
-    });
-
-    if (!existingProduct) {
-      return res.status(404).json({ message: "Produkt nie istnieje." });
-    }
-
-    const images = getImagesFromProduct(existingProduct);
-
-    for (const image of images) {
-      const rawPath =
-        image?.url ||
-        image?.path ||
-        image?.imageUrl ||
-        (image?.filename ? `/uploads/${image.filename}` : "");
-
-      if (!rawPath) continue;
-
-      let relativePath = rawPath;
-
-      if (relativePath.startsWith(BASE_URL)) {
-        relativePath = relativePath.replace(BASE_URL, "");
-      }
-
-      const imagePath = path.join(__dirname, relativePath.replace(/^\/+/, ""));
-
-      if (fs.existsSync(imagePath)) {
-        fs.unlinkSync(imagePath);
-      }
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ error: "Nieprawidłowe ID produktu" })
     }
 
     await prisma.productImage.deleteMany({
-      where: { productId },
-    });
+      where: { productId: id },
+    })
 
     await prisma.product.delete({
-      where: { id: productId },
-    });
+      where: { id },
+    })
 
-    return res.json({ message: "Produkt został usunięty." });
+    res.json({ message: "Produkt usunięty" })
   } catch (error) {
-    console.error("DELETE /products/:id error:", error);
-    return res.status(500).json({ message: "Błąd usuwania produktu." });
+    console.error("DELETE /products/:id error:", error)
+    res.status(500).json({ error: "Błąd usuwania produktu" })
   }
-});
+})
 
-/*
-|--------------------------------------------------------------------------
-| Zamówienia
-|--------------------------------------------------------------------------
-*/
+/* =========================
+   ORDERS
+========================= */
 
 app.get("/orders", authMiddleware, async (req, res) => {
   try {
     const orders = await prisma.order.findMany({
-      orderBy: { id: "desc" },
-    });
+      include: {
+        items: {
+          include: {
+            product: {
+              include: {
+                images: true,
+                category: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        id: "desc",
+      },
+    })
 
-    return res.json(orders);
+    res.json(orders)
   } catch (error) {
-    console.error("GET /orders error:", error);
-    return res.status(500).json({ message: "Błąd pobierania zamówień." });
+    console.error("GET /orders error:", error)
+    res.status(500).json({ error: "Błąd pobierania zamówień" })
   }
-});
+})
 
-ensureDefaultAdmin()
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Server działa na porcie ${PORT}`);
-    });
-  })
-  .catch((error) => {
-    console.error("Błąd startu aplikacji:", error);
-    process.exit(1);
-  });
+app.listen(PORT, () => {
+  console.log(`Server działa na porcie ${PORT}`)
+})
