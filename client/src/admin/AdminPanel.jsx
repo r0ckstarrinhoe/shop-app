@@ -102,6 +102,7 @@ export default function AdminPanel() {
       formData.append("categoryId", productData.categoryId);
       formData.append("description", productData.description);
       formData.append("price", productData.price);
+      formData.append("trending", String(Boolean(productData.trending)));
 
       productData.images.forEach((file) => {
         formData.append("images", file);
@@ -180,6 +181,7 @@ export default function AdminPanel() {
       formData.append("categoryId", productData.categoryId);
       formData.append("description", productData.description);
       formData.append("price", productData.price);
+      formData.append("trending", String(Boolean(productData.trending)));
 
       productData.images.forEach((file) => {
         formData.append("images", file);

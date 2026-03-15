@@ -18,6 +18,7 @@ export default function EditProductModal({
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [images, setImages] = useState([]);
+  const [trending, setTrending] = useState(false);
 
   useEffect(() => {
     if (!product) return;
@@ -27,6 +28,7 @@ export default function EditProductModal({
     setDescription(product.description || "");
     setPrice(product.price != null ? String(product.price) : "");
     setImages([]);
+    setTrending(Boolean(product.trending || product.isTrending));
   }, [product]);
 
   if (!open || !product) return null;
@@ -40,6 +42,7 @@ export default function EditProductModal({
       description: description.trim(),
       price,
       images,
+      trending,
     });
   }
 
@@ -116,6 +119,22 @@ export default function EditProductModal({
               Możesz zostawić puste, jeśli nie chcesz dodawać nowych zdjęć.
             </small>
           </div>
+
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={trending}
+              onChange={(e) => setTrending(e.target.checked)}
+            />
+            Produkt trendujący
+          </label>
 
           {productImages.length > 0 ? (
             <div className="admin-field">

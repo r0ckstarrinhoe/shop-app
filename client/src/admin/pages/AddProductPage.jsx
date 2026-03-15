@@ -6,6 +6,7 @@ export default function AddProductPage({ categories, onCreate, loading }) {
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [images, setImages] = useState([]);
+  const [trending, setTrending] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -16,6 +17,7 @@ export default function AddProductPage({ categories, onCreate, loading }) {
       description: description.trim(),
       price,
       images,
+      trending,
     });
 
     setName("");
@@ -23,6 +25,7 @@ export default function AddProductPage({ categories, onCreate, loading }) {
     setDescription("");
     setPrice("");
     setImages([]);
+    setTrending(false);
     e.target.reset();
   }
 
@@ -98,6 +101,22 @@ export default function AddProductPage({ categories, onCreate, loading }) {
           />
           <small>Możesz wybrać wiele zdjęć naraz.</small>
         </div>
+
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            cursor: "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={trending}
+            onChange={(e) => setTrending(e.target.checked)}
+          />
+          Produkt trendujący
+        </label>
 
         <button className="admin-btn primary" type="submit" disabled={loading}>
           {loading ? "Dodawanie..." : "Dodaj produkt"}

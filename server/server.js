@@ -96,7 +96,7 @@ function normalizeImagePath(value) {
   return `${BASE_URL}/uploads/${value}`;
 }
 
-function parseTrendingValue(value, fallback = false) {
+function parseTrendingInput(value, fallback = false) {
   if (value === undefined || value === null || value === "") return fallback;
   if (value === true || value === "true" || value === "1" || value === 1 || value === "on") {
     return true;
@@ -105,6 +105,30 @@ function parseTrendingValue(value, fallback = false) {
     return false;
   }
   return Boolean(value);
+}
+
+function isTrendingValue(value) {
+  return value === true || value === 1 || value === "1" || value === "true";
+}
+
+function toDbTrendingValue(parsedTrending, existingValue) {
+  if (typeof existingValue === "number") {
+    return parsedTrending ? 1 : 0;
+  }
+
+  return parsedTrending;
+}
+
+async function getTrendingStorageType() {
+  const sample = await prisma.product.findFirst({
+    select: { trending: true },
+  });
+
+  if (sample && typeof sample.trending === "number") {
+    return "number";
+  }
+
+  return "boolean";
 }
 
 function getImagesFromProduct(product) {
@@ -131,16 +155,8 @@ function mapProduct(product) {
     })
     .filter(Boolean);
 
-  const imageObjects = imageStrings.map((url, index) => ({
-    id: index + 1,
-    url,
-    path: url,
-    imageUrl: url,
-    src: url,
-  }));
-
   const firstImage = imageStrings[0] || "";
-  const trending = Boolean(product?.trending);
+  const trending = isTrendingValue(product?.trending);
 
   return {
     ...product,
@@ -150,7 +166,6 @@ function mapProduct(product) {
     thumbnail: firstImage,
     images: imageStrings,
     gallery: imageStrings,
-    imageObjects,
     categoryName:
       product?.category?.name || product?.categoryName || product?.category_name || "",
   };
@@ -345,39 +360,9 @@ app.get("/products", async (req, res) => {
   }
 });
 
-app.get("/products/:id", async (req, res) => {
-  try {
-    const productId = Number(req.params.id);
-
-    if (Number.isNaN(productId)) {
-      return res.status(400).json({ message: "Nieprawidłowe ID produktu." });
-    }
-
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
-      include: {
-        category: true,
-        images: true,
-      },
-    });
-
-    if (!product) {
-      return res.status(404).json({ message: "Produkt nie istnieje." });
-    }
-
-    return res.json(mapProduct(product));
-  } catch (error) {
-    console.error("GET /products/:id error:", error);
-    return res.status(500).json({ message: "Błąd pobierania produktu." });
-  }
-});
-
 app.get("/products/trending", async (req, res) => {
   try {
     const products = await prisma.product.findMany({
-      where: {
-        trending: true,
-      },
       include: {
         category: true,
         images: true,
@@ -385,10 +370,17 @@ app.get("/products/trending", async (req, res) => {
       orderBy: { id: "desc" },
     });
 
-    return res.json(products.map(mapProduct));
+    const trendingProducts = products.filter((product) =>
+      isTrendingValue(product.trending)
+    );
+
+    return res.json(trendingProducts.map(mapProduct));
   } catch (error) {
     console.error("GET /products/trending error:", error);
-    return res.status(500).json({ message: "Błąd pobierania trendujących produktów." });
+    return res.status(500).json({
+      message: "Błąd pobierania trendujących produktów.",
+      error: error.message,
+    });
   }
 });
 
@@ -445,11 +437,37 @@ app.get("/products/search/:text", async (req, res) => {
   }
 });
 
+app.get("/products/:id", async (req, res) => {
+  try {
+    const productId = Number(req.params.id);
+
+    if (Number.isNaN(productId)) {
+      return res.status(400).json({ message: "Nieprawidłowe ID produktu." });
+    }
+
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      include: {
+        category: true,
+        images: true,
+      },
+    });
+
+    if (!product) {
+      return res.status(404).json({ message: "Produkt nie istnieje." });
+    }
+
+    return res.json(mapProduct(product));
+  } catch (error) {
+    console.error("GET /products/:id error:", error);
+    return res.status(500).json({ message: "Błąd pobierania produktu." });
+  }
+});
+
 app.post("/products", authMiddleware, upload.array("images"), async (req, res) => {
   try {
     const body = req.body ?? {};
     const { name, categoryId, description, price } = body;
-    const trending = parseTrendingValue(body.trending, false);
 
     if (!name || !categoryId || !description || !price) {
       return res.status(400).json({
@@ -464,13 +482,18 @@ app.post("/products", authMiddleware, upload.array("images"), async (req, res) =
       return res.status(400).json({ message: "Nieprawidłowe categoryId lub price." });
     }
 
+    const trendingType = await getTrendingStorageType();
+    const parsedTrending = parseTrendingInput(body.trending, false);
+    const dbTrendingValue =
+      trendingType === "number" ? (parsedTrending ? 1 : 0) : parsedTrending;
+
     const createdProduct = await prisma.product.create({
       data: {
         name: name.trim(),
         description: description.trim(),
         price: parsedPrice,
         categoryId: parsedCategoryId,
-        trending,
+        trending: dbTrendingValue,
       },
     });
 
@@ -496,7 +519,10 @@ app.post("/products", authMiddleware, upload.array("images"), async (req, res) =
     return res.status(201).json(mapProduct(fullProduct));
   } catch (error) {
     console.error("POST /products error:", error);
-    return res.status(500).json({ message: "Błąd dodawania produktu." });
+    return res.status(500).json({
+      message: "Błąd dodawania produktu.",
+      error: error.message,
+    });
   }
 });
 
@@ -527,11 +553,20 @@ app.put("/products/:id", authMiddleware, upload.array("images"), async (req, res
 
     const parsedCategoryId = Number(categoryId);
     const parsedPrice = Number(price);
-    const trending = parseTrendingValue(body.trending, Boolean(existingProduct.trending));
 
     if (Number.isNaN(parsedCategoryId) || Number.isNaN(parsedPrice)) {
       return res.status(400).json({ message: "Nieprawidłowe categoryId lub price." });
     }
+
+    const parsedTrending = parseTrendingInput(
+      body.trending,
+      isTrendingValue(existingProduct.trending)
+    );
+
+    const dbTrendingValue = toDbTrendingValue(
+      parsedTrending,
+      existingProduct.trending
+    );
 
     await prisma.product.update({
       where: { id: productId },
@@ -540,7 +575,7 @@ app.put("/products/:id", authMiddleware, upload.array("images"), async (req, res
         description: description.trim(),
         price: parsedPrice,
         categoryId: parsedCategoryId,
-        trending,
+        trending: dbTrendingValue,
       },
     });
 
@@ -566,7 +601,10 @@ app.put("/products/:id", authMiddleware, upload.array("images"), async (req, res
     return res.json(mapProduct(updatedProduct));
   } catch (error) {
     console.error("PUT /products/:id error:", error);
-    return res.status(500).json({ message: "Błąd edycji produktu." });
+    return res.status(500).json({
+      message: "Błąd edycji produktu.",
+      error: error.message,
+    });
   }
 });
 
