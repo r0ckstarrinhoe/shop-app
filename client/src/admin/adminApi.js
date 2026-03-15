@@ -39,7 +39,8 @@ export async function apiFetch(endpoint, options = {}) {
 
   if (!response.ok) {
     const message =
-      (typeof data === "object" && (data?.message || data?.error)) ||
+      (typeof data === "object" &&
+        (data?.message || data?.error || JSON.stringify(data))) ||
       (typeof data === "string" && data) ||
       `Błąd ${response.status}`;
 
@@ -86,6 +87,7 @@ export function getProductCategoryName(product) {
 }
 
 export function getProductImages(product) {
+  if (Array.isArray(product?.imageObjects)) return product.imageObjects;
   if (Array.isArray(product?.images)) return product.images;
   if (Array.isArray(product?.productImages)) return product.productImages;
   if (Array.isArray(product?.gallery)) return product.gallery;
