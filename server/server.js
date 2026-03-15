@@ -19,6 +19,7 @@ const __dirname = path.dirname(__filename);
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "supersecretjwtkey";
+const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
 const uploadsDir = path.join(__dirname, "uploads");
 
@@ -73,6 +74,39 @@ function generateToken(admin) {
   );
 }
 
+function normalizeImagePath(value) {
+  if (!value || typeof value !== "string") return "";
+
+  if (value.startsWith("http://") || value.startsWith("https://")) {
+    return value;
+  }
+
+  if (value.startsWith("/uploads/")) {
+    return `${BASE_URL}${value}`;
+  }
+
+  if (value.startsWith("uploads/")) {
+    return `${BASE_URL}/${value}`;
+  }
+
+  if (value.startsWith("/")) {
+    return `${BASE_URL}${value}`;
+  }
+
+  return `${BASE_URL}/uploads/${value}`;
+}
+
+function parseTrendingValue(value, fallback = false) {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (value === true || value === "true" || value === "1" || value === 1 || value === "on") {
+    return true;
+  }
+  if (value === false || value === "false" || value === "0" || value === 0) {
+    return false;
+  }
+  return Boolean(value);
+}
+
 function getImagesFromProduct(product) {
   if (Array.isArray(product?.images)) return product.images;
   if (Array.isArray(product?.productImages)) return product.productImages;
@@ -83,21 +117,64 @@ function getImagesFromProduct(product) {
 function mapProduct(product) {
   if (!product) return product;
 
-  const images = getImagesFromProduct(product).map((img) => {
-    return {
-      id: img.id,
-      url:
-        img.url ||
-        img.path ||
-        img.imageUrl ||
-        (img.filename ? `/uploads/${img.filename}` : ""),
-    };
-  });
+  const mappedImages = getImagesFromProduct(product)
+    .map((img) => {
+      const raw =
+        img?.url ||
+        img?.path ||
+        img?.imageUrl ||
+        img?.src ||
+        (img?.filename ? `/uploads/${img.filename}` : "");
+
+      const absoluteUrl = normalizeImagePath(raw);
+
+      return {
+        id: img?.id,
+        url: absoluteUrl,
+        path: absoluteUrl,
+        imageUrl: absoluteUrl,
+        src: absoluteUrl,
+      };
+    })
+    .filter((img) => img.url);
+
+  const firstImage = mappedImages[0]?.url || "";
+  const trending = Boolean(product?.trending);
 
   return {
     ...product,
-    images,
+    trending,
+    isTrending: trending,
+    image: firstImage,
+    thumbnail: firstImage,
+    images: mappedImages,
+    categoryName:
+      product?.category?.name || product?.categoryName || product?.category_name || "",
   };
+}
+
+async function ensureDefaultAdmin() {
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (!adminEmail || !adminPassword) return;
+
+  const existingAdmin = await prisma.admin.findUnique({
+    where: { email: adminEmail },
+  });
+
+  if (existingAdmin) return;
+
+  const hashedPassword = await bcrypt.hash(adminPassword, 10);
+
+  await prisma.admin.create({
+    data: {
+      email: adminEmail,
+      password: hashedPassword,
+    },
+  });
+
+  console.log(`Domyślny admin utworzony: ${adminEmail}`);
 }
 
 /*
@@ -188,9 +265,7 @@ app.post("/admin/login", async (req, res) => {
 app.get("/categories", async (req, res) => {
   try {
     const categories = await prisma.category.findMany({
-      orderBy: {
-        id: "desc",
-      },
+      orderBy: { id: "desc" },
     });
 
     return res.json(categories);
@@ -209,9 +284,7 @@ app.post("/categories", authMiddleware, async (req, res) => {
     }
 
     const category = await prisma.category.create({
-      data: {
-        name: name.trim(),
-      },
+      data: { name: name.trim() },
     });
 
     return res.status(201).json(category);
@@ -234,19 +307,9 @@ app.put("/categories/:id", authMiddleware, async (req, res) => {
       return res.status(400).json({ message: "Nazwa kategorii jest wymagana." });
     }
 
-    const existingCategory = await prisma.category.findUnique({
-      where: { id: categoryId },
-    });
-
-    if (!existingCategory) {
-      return res.status(404).json({ message: "Kategoria nie istnieje." });
-    }
-
     const updatedCategory = await prisma.category.update({
       where: { id: categoryId },
-      data: {
-        name: name.trim(),
-      },
+      data: { name: name.trim() },
     });
 
     return res.json(updatedCategory);
@@ -269,9 +332,7 @@ app.get("/products", async (req, res) => {
         category: true,
         images: true,
       },
-      orderBy: {
-        id: "desc",
-      },
+      orderBy: { id: "desc" },
     });
 
     return res.json(products.map(mapProduct));
@@ -318,17 +379,13 @@ app.get("/products/trending", async (req, res) => {
         category: true,
         images: true,
       },
-      orderBy: {
-        id: "desc",
-      },
+      orderBy: { id: "desc" },
     });
 
     return res.json(products.map(mapProduct));
   } catch (error) {
     console.error("GET /products/trending error:", error);
-    return res
-      .status(500)
-      .json({ message: "Błąd pobierania trendujących produktów." });
+    return res.status(500).json({ message: "Błąd pobierania trendujących produktów." });
   }
 });
 
@@ -341,24 +398,18 @@ app.get("/products/category/:id", async (req, res) => {
     }
 
     const products = await prisma.product.findMany({
-      where: {
-        categoryId,
-      },
+      where: { categoryId },
       include: {
         category: true,
         images: true,
       },
-      orderBy: {
-        id: "desc",
-      },
+      orderBy: { id: "desc" },
     });
 
     return res.json(products.map(mapProduct));
   } catch (error) {
     console.error("GET /products/category/:id error:", error);
-    return res
-      .status(500)
-      .json({ message: "Błąd pobierania produktów kategorii." });
+    return res.status(500).json({ message: "Błąd pobierania produktów kategorii." });
   }
 });
 
@@ -373,25 +424,15 @@ app.get("/products/search/:text", async (req, res) => {
     const products = await prisma.product.findMany({
       where: {
         OR: [
-          {
-            name: {
-              contains: text,
-            },
-          },
-          {
-            description: {
-              contains: text,
-            },
-          },
+          { name: { contains: text } },
+          { description: { contains: text } },
         ],
       },
       include: {
         category: true,
         images: true,
       },
-      orderBy: {
-        id: "desc",
-      },
+      orderBy: { id: "desc" },
     });
 
     return res.json(products.map(mapProduct));
@@ -405,6 +446,7 @@ app.post("/products", authMiddleware, upload.array("images"), async (req, res) =
   try {
     const body = req.body ?? {};
     const { name, categoryId, description, price } = body;
+    const trending = parseTrendingValue(body.trending, false);
 
     if (!name || !categoryId || !description || !price) {
       return res.status(400).json({
@@ -419,16 +461,17 @@ app.post("/products", authMiddleware, upload.array("images"), async (req, res) =
       return res.status(400).json({ message: "Nieprawidłowe categoryId lub price." });
     }
 
-    const files = Array.isArray(req.files) ? req.files : [];
-
     const createdProduct = await prisma.product.create({
       data: {
         name: name.trim(),
         description: description.trim(),
         price: parsedPrice,
         categoryId: parsedCategoryId,
+        trending,
       },
     });
+
+    const files = Array.isArray(req.files) ? req.files : [];
 
     if (files.length > 0) {
       await prisma.productImage.createMany({
@@ -471,19 +514,20 @@ app.put("/products/:id", authMiddleware, upload.array("images"), async (req, res
       });
     }
 
-    const parsedCategoryId = Number(categoryId);
-    const parsedPrice = Number(price);
-
-    if (Number.isNaN(parsedCategoryId) || Number.isNaN(parsedPrice)) {
-      return res.status(400).json({ message: "Nieprawidłowe categoryId lub price." });
-    }
-
     const existingProduct = await prisma.product.findUnique({
       where: { id: productId },
     });
 
     if (!existingProduct) {
       return res.status(404).json({ message: "Produkt nie istnieje." });
+    }
+
+    const parsedCategoryId = Number(categoryId);
+    const parsedPrice = Number(price);
+    const trending = parseTrendingValue(body.trending, Boolean(existingProduct.trending));
+
+    if (Number.isNaN(parsedCategoryId) || Number.isNaN(parsedPrice)) {
+      return res.status(400).json({ message: "Nieprawidłowe categoryId lub price." });
     }
 
     await prisma.product.update({
@@ -493,6 +537,7 @@ app.put("/products/:id", authMiddleware, upload.array("images"), async (req, res
         description: description.trim(),
         price: parsedPrice,
         categoryId: parsedCategoryId,
+        trending,
       },
     });
 
@@ -545,26 +590,32 @@ app.delete("/products/:id", authMiddleware, async (req, res) => {
 
     for (const image of images) {
       const rawPath =
-        image.url || image.path || image.imageUrl || (image.filename ? `/uploads/${image.filename}` : "");
+        image?.url ||
+        image?.path ||
+        image?.imageUrl ||
+        (image?.filename ? `/uploads/${image.filename}` : "");
 
       if (!rawPath) continue;
 
-      const imagePath = path.join(__dirname, rawPath.replace(/^\/+/, ""));
+      let relativePath = rawPath;
+
+      if (relativePath.startsWith(BASE_URL)) {
+        relativePath = relativePath.replace(BASE_URL, "");
+      }
+
+      const imagePath = path.join(__dirname, relativePath.replace(/^\/+/, ""));
+
       if (fs.existsSync(imagePath)) {
         fs.unlinkSync(imagePath);
       }
     }
 
     await prisma.productImage.deleteMany({
-      where: {
-        productId,
-      },
+      where: { productId },
     });
 
     await prisma.product.delete({
-      where: {
-        id: productId,
-      },
+      where: { id: productId },
     });
 
     return res.json({ message: "Produkt został usunięty." });
@@ -583,9 +634,7 @@ app.delete("/products/:id", authMiddleware, async (req, res) => {
 app.get("/orders", authMiddleware, async (req, res) => {
   try {
     const orders = await prisma.order.findMany({
-      orderBy: {
-        id: "desc",
-      },
+      orderBy: { id: "desc" },
     });
 
     return res.json(orders);
@@ -595,6 +644,13 @@ app.get("/orders", authMiddleware, async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server działa na porcie ${PORT}`);
-});
+ensureDefaultAdmin()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server działa na porcie ${PORT}`);
+    });
+  })
+  .catch((error) => {
+    console.error("Błąd startu aplikacji:", error);
+    process.exit(1);
+  });
