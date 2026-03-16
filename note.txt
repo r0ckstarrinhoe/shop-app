@@ -45,3 +45,7 @@ curl -X POST http://localhost:3000/admin/register \
 -d '{"email":"admin@test.pl","password":"kurwa"}'
 
 doinstalowalem bcryptjs
+
+git add .
+git commit -m "dodanie zmian"
+git push
