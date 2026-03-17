@@ -1,13 +1,22 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import EditProductModal from "../components/EditProductModal";
 import {
+  getProducts,
+  normalizeProducts,
   formatPrice,
   getImageUrl,
-  getProductCategoryId,
-  getProductCategoryName,
   getProductImages,
+  getProductCategoryName,
+  deleteProduct,
 } from "../adminApi";
 
-export default function ProductsPage({ products, categories, onOpenEdit }) {
+export default function ProductsPage({ categories = [], onProductsChange }) {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+
   const categoryMap = useMemo(() => {
     return categories.reduce((acc, category) => {
       acc[String(category.id)] = category.name;
@@ -15,148 +24,191 @@ export default function ProductsPage({ products, categories, onOpenEdit }) {
     }, {});
   }, [categories]);
 
+  async function loadProducts() {
+    try {
+      setLoading(true);
+      setError("");
+
+      const data = await getProducts();
+      const normalized = normalizeProducts(data);
+
+      setProducts(Array.isArray(normalized) ? normalized : []);
+    } catch (err) {
+      console.error("LOAD PRODUCTS ERROR:", err);
+      setError(err.message || "Nie udało się pobrać produktów.");
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadProducts();
+  }, []);
+
+  async function handleDelete(product) {
+    const confirmed = window.confirm(`Usunąć produkt "${product.name}"?`);
+    if (!confirmed) return;
+
+    try {
+      setDeletingId(product.id);
+      await deleteProduct(product.id);
+      await loadProducts();
+
+      if (onProductsChange) {
+        onProductsChange();
+      }
+    } catch (err) {
+      alert(err.message || "Nie udało się usunąć produktu.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  function handleOpenEdit(product) {
+    setEditingProduct(product);
+  }
+
+  function handleCloseEdit() {
+    setEditingProduct(null);
+  }
+
+  async function handleSaved() {
+    setEditingProduct(null);
+    await loadProducts();
+
+    if (onProductsChange) {
+      onProductsChange();
+    }
+  }
+
   return (
-    <div className="admin-content-card">
-      <div className="admin-page-header">
-        <div>
-          <h1>Lista produktów</h1>
-          <p>
-            Tutaj możesz przeglądać i edytować produkty. Produkty oznaczone jako
-            trending są używane w trybie manual.
-          </p>
+    <>
+      <div className="admin-content-card">
+        <div className="admin-page-header">
+          <div>
+            <h1>Lista produktów</h1>
+            <p>Tutaj możesz przeglądać i edytować produkty.</p>
+          </div>
+
+          <button type="button" onClick={loadProducts} disabled={loading}>
+            {loading ? "Odświeżanie..." : "Odśwież"}
+          </button>
         </div>
-      </div>
 
-      {!products.length ? (
-        <div className="admin-empty-state">Brak produktów.</div>
-      ) : (
-        <div className="admin-table-wrap">
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>Zdjęcie</th>
-                <th>Nazwa</th>
-                <th>Kategoria</th>
-                <th>Cena</th>
-                <th>Trending</th>
-                <th>Akcje</th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((product) => {
-                const firstImage = getImageUrl(getProductImages(product)[0]);
-                const categoryName =
-                  getProductCategoryName(product) ||
-                  categoryMap[getProductCategoryId(product)] ||
-                  "-";
+        {loading ? (
+          <div className="admin-empty-state">Ładowanie produktów...</div>
+        ) : error ? (
+          <div className="admin-error-box">{error}</div>
+        ) : !products.length ? (
+          <div className="admin-empty-state">Brak produktów.</div>
+        ) : (
+          <div className="admin-table-wrap">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Zdjęcie</th>
+                  <th>Nazwa</th>
+                  <th>Kategoria</th>
+                  <th>Cena</th>
+                  <th>Trending</th>
+                  <th>Akcje</th>
+                </tr>
+              </thead>
 
-                const isTrending =
-                  product?.isTrending === true ||
-                  product?.trending === true ||
-                  product?.isTrending === 1 ||
-                  product?.trending === 1 ||
-                  product?.isTrending === "true" ||
-                  product?.trending === "true";
+              <tbody>
+                {products.map((product) => {
+                  const images = getProductImages(product);
+                  const firstImage = images.length ? getImageUrl(images[0]) : "";
+                  const categoryName =
+                    getProductCategoryName(product) ||
+                    categoryMap[String(product.categoryId)] ||
+                    "-";
 
-                return (
-                  <tr key={product.id}>
-                    <td>
-                      {firstImage ? (
-                        <img
-                          src={firstImage}
-                          alt={product.name}
-                          className="admin-product-thumb"
-                        />
-                      ) : (
-                        <div className="admin-product-thumb admin-product-thumb-empty">
-                          Brak
-                        </div>
-                      )}
-                    </td>
-
-                    <td>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "8px",
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <span>{product.name || "Bez nazwy"}</span>
-
-                        {isTrending ? (
-                          <span
+                  return (
+                    <tr key={product.id}>
+                      <td>
+                        {firstImage ? (
+                          <img
+                            src={firstImage}
+                            alt={product.name}
                             style={{
-                              display: "inline-flex",
+                              width: "64px",
+                              height: "64px",
+                              objectFit: "cover",
+                              borderRadius: "10px",
+                              border: "1px solid #ddd",
+                              background: "#fff",
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              width: "64px",
+                              height: "64px",
+                              display: "flex",
                               alignItems: "center",
-                              padding: "4px 8px",
-                              borderRadius: "999px",
-                              background: "#fef3c7",
-                              color: "#92400e",
+                              justifyContent: "center",
+                              border: "1px solid #ddd",
+                              borderRadius: "10px",
                               fontSize: "12px",
-                              fontWeight: 600,
+                              color: "#777",
+                              background: "#fafafa",
+                              textAlign: "center",
+                              padding: "4px",
                             }}
                           >
-                            Trending
-                          </span>
-                        ) : null}
-                      </div>
-                    </td>
+                            Brak zdjęcia
+                          </div>
+                        )}
+                      </td>
 
-                    <td>{categoryName}</td>
-                    <td>{formatPrice(product.price)}</td>
-
-                    <td>
-                      {isTrending ? (
-                        <span
+                      <td>{product.name}</td>
+                      <td>{categoryName}</td>
+                      <td>{formatPrice(product.price)}</td>
+                      <td>{product.isTrending ? "Tak" : "Nie"}</td>
+                      <td>
+                        <div
                           style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            padding: "4px 8px",
-                            borderRadius: "999px",
-                            background: "#dcfce7",
-                            color: "#166534",
-                            fontSize: "12px",
-                            fontWeight: 600,
+                            display: "flex",
+                            gap: "8px",
+                            flexWrap: "wrap",
                           }}
                         >
-                          Tak
-                        </span>
-                      ) : (
-                        <span
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            padding: "4px 8px",
-                            borderRadius: "999px",
-                            background: "#f3f4f6",
-                            color: "#4b5563",
-                            fontSize: "12px",
-                            fontWeight: 600,
-                          }}
-                        >
-                          Nie
-                        </span>
-                      )}
-                    </td>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(product)}
+                          >
+                            Edytuj
+                          </button>
 
-                    <td>
-                      <button
-                        type="button"
-                        className="admin-btn small"
-                        onClick={() => onOpenEdit(product)}
-                      >
-                        Edytuj
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
+                          <button
+                            type="button"
+                            className="admin-button-danger"
+                            onClick={() => handleDelete(product)}
+                            disabled={deletingId === product.id}
+                          >
+                            {deletingId === product.id ? "Usuwanie..." : "Usuń"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {editingProduct ? (
+        <EditProductModal
+          product={editingProduct}
+          categories={categories}
+          onClose={handleCloseEdit}
+          onSaved={handleSaved}
+        />
+      ) : null}
+    </>
   );
 }

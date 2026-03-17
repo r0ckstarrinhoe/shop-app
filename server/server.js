@@ -41,9 +41,21 @@ function round2(value) {
 
 function parseBoolean(value) {
   if (typeof value === "boolean") return value;
-  if (typeof value === "string") {
-    return value === "true" || value === "1";
+
+  if (typeof value === "number") {
+    return value === 1;
   }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return (
+      normalized === "true" ||
+      normalized === "1" ||
+      normalized === "on" ||
+      normalized === "yes"
+    );
+  }
+
   return false;
 }
 
@@ -90,7 +102,8 @@ function serializeDiscount(discount) {
     scope: discount.scope,
     valueType: discount.valueType,
     value: Number(discount.value),
-    minOrderValue: discount.minOrderValue !== null ? Number(discount.minOrderValue) : null,
+    minOrderValue:
+      discount.minOrderValue !== null ? Number(discount.minOrderValue) : null,
     isActive: discount.isActive,
     startsAt: discount.startsAt,
     endsAt: discount.endsAt,
@@ -385,11 +398,15 @@ async function calculateDiscountValidation({ code, items }) {
     };
   }
 
-  const minOrderValue = discount.minOrderValue !== null ? Number(discount.minOrderValue) : null;
+  const minOrderValue =
+    discount.minOrderValue !== null ? Number(discount.minOrderValue) : null;
+
   if (minOrderValue !== null && subtotal < minOrderValue) {
     return {
       valid: false,
-      message: `Minimalna wartość zamówienia dla tego kodu to ${minOrderValue.toFixed(2)} zł.`,
+      message: `Minimalna wartość zamówienia dla tego kodu to ${minOrderValue.toFixed(
+        2
+      )} zł.`,
       code: normalizedCode,
       discount: serializeDiscount(discount),
       cart: {
@@ -406,6 +423,7 @@ async function calculateDiscountValidation({ code, items }) {
   }
 
   const applicableItems = getApplicableItems(cartItems, discount);
+
   if (!applicableItems.length) {
     return {
       valid: false,
@@ -1056,6 +1074,206 @@ app.put("/trending-settings", authMiddleware, async (req, res) => {
    DISCOUNTS
 ========================= */
 
+app.get("/discounts", async (req, res) => {
+  try {
+    const discounts = await prisma.discount.findMany({
+      include: {
+        product: true,
+        category: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.json(discounts);
+  } catch (error) {
+    console.error("GET DISCOUNTS ERROR:", error);
+    res.status(500).json({ message: "Błąd pobierania rabatów." });
+  }
+});
+
+app.get("/discounts/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    const discount = await prisma.discount.findUnique({
+      where: { id },
+      include: {
+        product: true,
+        category: true,
+      },
+    });
+
+    if (!discount) {
+      return res.status(404).json({ message: "Rabat nie istnieje." });
+    }
+
+    res.json(discount);
+  } catch (error) {
+    console.error("GET DISCOUNT ERROR:", error);
+    res.status(500).json({ message: "Błąd pobierania rabatu." });
+  }
+});
+
+app.post("/discounts", async (req, res) => {
+  try {
+    let {
+      name,
+      code,
+      scope,
+      valueType,
+      value,
+      productId,
+      categoryId,
+      startsAt,
+      endsAt,
+      isActive,
+    } = req.body;
+
+    code = normalizeCode(code);
+
+    if (!name || !scope || !valueType || value === undefined || value === null) {
+      return res.status(400).json({ message: "Brak wymaganych pól." });
+    }
+
+    if (valueType === "PERCENT" && (Number(value) <= 0 || Number(value) > 100)) {
+      return res.status(400).json({ message: "Procent musi być w zakresie 1-100." });
+    }
+
+    if (valueType === "FIXED" && Number(value) <= 0) {
+      return res.status(400).json({ message: "Kwota musi być większa od 0." });
+    }
+
+    if (valueType === "FIXED" && scope === "GLOBAL") {
+      return res.status(400).json({ message: "Rabaty kwotowe nie mogą być globalne." });
+    }
+
+    if (scope === "PRODUCT" && !productId) {
+      return res.status(400).json({ message: "Dla PRODUCT wymagane jest productId." });
+    }
+
+    if (scope === "CATEGORY" && !categoryId) {
+      return res.status(400).json({ message: "Dla CATEGORY wymagane jest categoryId." });
+    }
+
+    if (scope === "GLOBAL") {
+      productId = null;
+      categoryId = null;
+    }
+
+    if (startsAt && endsAt && new Date(startsAt) > new Date(endsAt)) {
+      return res.status(400).json({ message: "Niepoprawny zakres dat." });
+    }
+
+    const discount = await prisma.discount.create({
+      data: {
+        name: String(name).trim(),
+        code,
+        scope,
+        valueType,
+        value: Number(value),
+        productId: productId ? Number(productId) : null,
+        categoryId: categoryId ? Number(categoryId) : null,
+        startsAt: startsAt ? new Date(startsAt) : null,
+        endsAt: endsAt ? new Date(endsAt) : null,
+        isActive: isActive !== undefined ? parseBoolean(isActive) : true,
+      },
+    });
+
+    res.status(201).json(discount);
+  } catch (error) {
+    console.error("CREATE DISCOUNT ERROR:", error);
+    res.status(500).json({ message: "Błąd tworzenia rabatu." });
+  }
+});
+
+app.put("/discounts/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    let {
+      name,
+      code,
+      scope,
+      valueType,
+      value,
+      productId,
+      categoryId,
+      startsAt,
+      endsAt,
+      isActive,
+    } = req.body;
+
+    if (code !== undefined) {
+      code = normalizeCode(code);
+    }
+
+    if (valueType === "PERCENT" && (Number(value) <= 0 || Number(value) > 100)) {
+      return res.status(400).json({ message: "Procent musi być w zakresie 1-100." });
+    }
+
+    if (valueType === "FIXED" && Number(value) <= 0) {
+      return res.status(400).json({ message: "Kwota musi być większa od 0." });
+    }
+
+    if (valueType === "FIXED" && scope === "GLOBAL") {
+      return res.status(400).json({ message: "Rabaty kwotowe nie mogą być globalne." });
+    }
+
+    if (scope === "PRODUCT" && !productId) {
+      return res.status(400).json({ message: "Dla PRODUCT wymagane jest productId." });
+    }
+
+    if (scope === "CATEGORY" && !categoryId) {
+      return res.status(400).json({ message: "Dla CATEGORY wymagane jest categoryId." });
+    }
+
+    if (scope === "GLOBAL") {
+      productId = null;
+      categoryId = null;
+    }
+
+    if (startsAt && endsAt && new Date(startsAt) > new Date(endsAt)) {
+      return res.status(400).json({ message: "Niepoprawny zakres dat." });
+    }
+
+    const discount = await prisma.discount.update({
+      where: { id },
+      data: {
+        name,
+        code,
+        scope,
+        valueType,
+        value: value !== undefined ? Number(value) : undefined,
+        productId: productId ? Number(productId) : null,
+        categoryId: categoryId ? Number(categoryId) : null,
+        startsAt: startsAt ? new Date(startsAt) : null,
+        endsAt: endsAt ? new Date(endsAt) : null,
+        isActive: isActive !== undefined ? parseBoolean(isActive) : undefined,
+      },
+    });
+
+    res.json(discount);
+  } catch (error) {
+    console.error("UPDATE DISCOUNT ERROR:", error);
+    res.status(500).json({ message: "Błąd aktualizacji rabatu." });
+  }
+});
+
+app.delete("/discounts/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    await prisma.discount.delete({
+      where: { id },
+    });
+
+    res.json({ message: "Rabat usunięty." });
+  } catch (error) {
+    console.error("DELETE DISCOUNT ERROR:", error);
+    res.status(500).json({ message: "Błąd usuwania rabatu." });
+  }
+});
+
 app.post("/discounts/validate", async (req, res) => {
   try {
     const { code, items } = req.body;
@@ -1081,156 +1299,6 @@ app.post("/discounts/validate", async (req, res) => {
       },
       affectedItems: [],
     });
-  }
-});
-
-app.get("/discounts", async (req, res) => {
-  try {
-    const discounts = await prisma.discount.findMany({
-      include: {
-        product: true,
-        category: true,
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    res.json(discounts);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Błąd pobierania rabatów" });
-  }
-});
-
-app.post("/discounts", async (req, res) => {
-  try {
-    let {
-      name,
-      code,
-      scope,
-      valueType,
-      value,
-      productId,
-      categoryId,
-      startsAt,
-      endsAt,
-    } = req.body;
-
-    code = code?.trim().toUpperCase();
-
-    // ===== WALIDACJA =====
-
-    if (!name || !scope || !valueType || !value) {
-      return res.status(400).json({ message: "Brak wymaganych pól" });
-    }
-
-    if (valueType === "PERCENT" && (value <= 0 || value > 100)) {
-      return res.status(400).json({ message: "Procent musi być 1-100" });
-    }
-
-    if (valueType === "FIXED" && value <= 0) {
-      return res.status(400).json({ message: "Kwota musi być > 0" });
-    }
-
-    if (valueType === "FIXED" && scope === "GLOBAL") {
-      return res.status(400).json({ message: "Kwota nie może być globalna" });
-    }
-
-    if (scope === "PRODUCT" && !productId) {
-      return res.status(400).json({ message: "Brak productId" });
-    }
-
-    if (scope === "CATEGORY" && !categoryId) {
-      return res.status(400).json({ message: "Brak categoryId" });
-    }
-
-    if (scope === "GLOBAL") {
-      productId = null;
-      categoryId = null;
-    }
-
-    if (startsAt && endsAt && new Date(startsAt) > new Date(endsAt)) {
-      return res.status(400).json({ message: "Niepoprawny zakres dat" });
-    }
-
-    const discount = await prisma.discount.create({
-      data: {
-        name,
-        code,
-        scope,
-        valueType,
-        value: Number(value),
-        productId: productId ? Number(productId) : null,
-        categoryId: categoryId ? Number(categoryId) : null,
-        startsAt: startsAt ? new Date(startsAt) : null,
-        endsAt: endsAt ? new Date(endsAt) : null,
-      },
-    });
-
-    res.status(201).json(discount);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Błąd tworzenia rabatu" });
-  }
-});
-
-app.put("/discounts/:id", async (req, res) => {
-  try {
-    const id = Number(req.params.id);
-
-    let {
-      name,
-      code,
-      scope,
-      valueType,
-      value,
-      productId,
-      categoryId,
-      startsAt,
-      endsAt,
-      isActive,
-    } = req.body;
-
-    code = code?.trim().toUpperCase();
-
-    if (valueType === "FIXED" && scope === "GLOBAL") {
-      return res.status(400).json({ message: "Kwota nie może być globalna" });
-    }
-
-    const discount = await prisma.discount.update({
-      where: { id },
-      data: {
-        name,
-        code,
-        scope,
-        valueType,
-        value: value !== undefined ? Number(value) : undefined,
-        productId: productId ? Number(productId) : null,
-        categoryId: categoryId ? Number(categoryId) : null,
-        startsAt: startsAt ? new Date(startsAt) : null,
-        endsAt: endsAt ? new Date(endsAt) : null,
-        isActive,
-      },
-    });
-
-    res.json(discount);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Błąd aktualizacji rabatu" });
-  }
-});
-
-app.delete("/discounts/:id", async (req, res) => {
-  try {
-    const id = Number(req.params.id);
-
-    await prisma.discount.delete({
-      where: { id },
-    });
-
-    res.json({ message: "Rabat usunięty" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Błąd usuwania rabatu" });
   }
 });
 

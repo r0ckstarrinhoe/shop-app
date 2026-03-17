@@ -68,6 +68,12 @@ export function normalizeOrders(data) {
   return [];
 }
 
+export function normalizeDiscounts(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.discounts)) return data.discounts;
+  return [];
+}
+
 export function getProductCategoryId(product) {
   return String(
     product?.categoryId ||
@@ -130,8 +136,153 @@ export function getInitialSection() {
   if (hash === "add-product") return "add-product";
   if (hash === "add-category") return "add-category";
   if (hash === "orders") return "orders";
+  if (hash === "discounts") return "discounts";
+  if (hash === "add-discount") return "add-discount";
+  if (hash === "trending-settings") return "trending-settings";
 
   return "products";
+}
+
+/* =========================
+   AUTH
+========================= */
+
+export async function loginAdmin(email, password) {
+  const data = await apiFetch("/admin/login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email, password }),
+  });
+
+  if (data?.token) {
+    setToken(data.token);
+  }
+
+  return data;
+}
+
+export async function registerAdmin(email, password) {
+  return apiFetch("/admin/register", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+/* =========================
+   CATEGORIES
+========================= */
+
+export async function getCategories() {
+  return apiFetch("/categories");
+}
+
+export async function createCategory(name) {
+  return apiFetch("/categories", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name }),
+  });
+}
+
+/* =========================
+   PRODUCTS
+========================= */
+
+export async function getProducts() {
+  return apiFetch("/products");
+}
+
+export async function getProduct(id) {
+  return apiFetch(`/products/${id}`);
+}
+
+export async function deleteProduct(id) {
+  return apiFetch(`/products/${id}`, {
+    method: "DELETE",
+  });
+}
+
+/* 
+  KLUCZOWY FIX:
+  wysyłamy isTrending jako "true"/"false" w FormData
+*/
+export async function createProduct(product) {
+  const formData = new FormData();
+
+  formData.append("name", product?.name ?? "");
+  formData.append("description", product?.description ?? "");
+  formData.append("price", String(product?.price ?? ""));
+  formData.append("categoryId", String(product?.categoryId ?? ""));
+  formData.append("isTrending", String(Boolean(product?.isTrending)));
+
+  if (Array.isArray(product?.images)) {
+    product.images.forEach((file) => {
+      if (file instanceof File) {
+        formData.append("images", file);
+      }
+    });
+  }
+
+  return apiFetch("/products", {
+    method: "POST",
+    body: formData,
+  });
+}
+
+/* 
+  KLUCZOWY FIX:
+  wysyłamy isTrending jako "true"/"false" w FormData
+*/
+export async function updateProduct(id, product) {
+  const formData = new FormData();
+
+  if (product?.name !== undefined) {
+    formData.append("name", product.name ?? "");
+  }
+
+  if (product?.description !== undefined) {
+    formData.append("description", product.description ?? "");
+  }
+
+  if (product?.price !== undefined) {
+    formData.append("price", String(product.price ?? ""));
+  }
+
+  if (product?.categoryId !== undefined) {
+    formData.append("categoryId", String(product.categoryId ?? ""));
+  }
+
+  if (product?.isTrending !== undefined) {
+    formData.append("isTrending", String(Boolean(product.isTrending)));
+  }
+
+  if (product?.replaceImages !== undefined) {
+    formData.append("replaceImages", String(Boolean(product.replaceImages)));
+  }
+
+  if (Array.isArray(product?.images)) {
+    product.images.forEach((file) => {
+      if (file instanceof File) {
+        formData.append("images", file);
+      }
+    });
+  }
+
+  return apiFetch(`/products/${id}`, {
+    method: "PUT",
+    body: formData,
+  });
+}
+
+export async function getTrendingProducts() {
+  return apiFetch("/products/trending");
 }
 
 /* =========================
@@ -149,5 +300,53 @@ export async function updateTrendingSettings(data) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(data),
+  });
+}
+
+/* =========================
+   DISCOUNTS
+========================= */
+
+export async function getDiscounts() {
+  return apiFetch("/discounts");
+}
+
+export async function getDiscount(id) {
+  return apiFetch(`/discounts/${id}`);
+}
+
+export async function createDiscount(data) {
+  return apiFetch("/discounts", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateDiscount(id, data) {
+  return apiFetch(`/discounts/${id}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteDiscount(id) {
+  return apiFetch(`/discounts/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export async function validateDiscount(code, items) {
+  return apiFetch("/discounts/validate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ code, items }),
   });
 }
