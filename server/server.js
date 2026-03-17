@@ -20,6 +20,15 @@ const __dirname = path.dirname(__filename)
 const PORT = process.env.PORT || 3000
 const JWT_SECRET = process.env.JWT_SECRET || "secret123"
 
+const DEFAULT_TRENDING_SETTINGS = {
+  id: 1,
+  mode: "manual",
+  limit: 8,
+  bestSellerDays: 7,
+}
+
+const ALLOWED_TRENDING_MODES = ["manual", "best_sellers", "newest"]
+
 app.use(cors())
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
@@ -67,7 +76,6 @@ function getBaseUrl(req) {
 
 function toAbsoluteUrl(req, value) {
   if (!value) return null
-
   if (typeof value !== "string") return null
 
   if (value.startsWith("http://") || value.startsWith("https://")) {
@@ -169,6 +177,166 @@ function parseIsTrending(value, fallback = false) {
   return false
 }
 
+function parsePositiveInt(value, fallback) {
+  if (value === undefined || value === null || value === "") return fallback
+
+  const parsed = Number(value)
+
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    return fallback
+  }
+
+  return Math.floor(parsed)
+}
+
+async function getTrendingSettings() {
+  return prisma.trendingSettings.upsert({
+    where: { id: DEFAULT_TRENDING_SETTINGS.id },
+    update: {},
+    create: DEFAULT_TRENDING_SETTINGS,
+  })
+}
+
+function normalizeTrendingSettings(settings) {
+  return {
+    id: settings.id,
+    mode: settings.mode,
+    limit: settings.limit,
+    bestSellerDays: settings.bestSellerDays,
+    createdAt: settings.createdAt,
+    updatedAt: settings.updatedAt,
+  }
+}
+
+async function getProductsByIdsInOrder(productIds) {
+  if (!productIds.length) return []
+
+  const products = await prisma.product.findMany({
+    where: {
+      id: {
+        in: productIds,
+      },
+    },
+    include: {
+      images: true,
+      category: true,
+    },
+  })
+
+  const productsMap = new Map(products.map((product) => [product.id, product]))
+
+  return productIds.map((id) => productsMap.get(id)).filter(Boolean)
+}
+
+async function getManualTrendingProducts(limit) {
+  return prisma.product.findMany({
+    where: {
+      isTrending: true,
+    },
+    include: {
+      images: true,
+      category: true,
+    },
+    orderBy: [
+      {
+        id: "desc",
+      },
+    ],
+    take: limit,
+  })
+}
+
+async function getNewestTrendingProducts(limit) {
+  return prisma.product.findMany({
+    include: {
+      images: true,
+      category: true,
+    },
+    orderBy: [
+      {
+        createdAt: "desc",
+      },
+      {
+        id: "desc",
+      },
+    ],
+    take: limit,
+  })
+}
+
+async function getBestSellerTrendingProducts(limit, bestSellerDays) {
+  const sinceDate = new Date()
+  sinceDate.setDate(sinceDate.getDate() - bestSellerDays)
+
+  const grouped = await prisma.orderItem.groupBy({
+    by: ["productId"],
+    where: {
+      order: {
+        createdAt: {
+          gte: sinceDate,
+        },
+      },
+    },
+    _sum: {
+      quantity: true,
+    },
+    orderBy: {
+      _sum: {
+        quantity: "desc",
+      },
+    },
+    take: limit,
+  })
+
+  const sortedIds = grouped
+    .filter((item) => (item._sum.quantity || 0) > 0)
+    .map((item) => item.productId)
+
+  if (!sortedIds.length) {
+    return []
+  }
+
+  return getProductsByIdsInOrder(sortedIds)
+}
+
+async function resolveTrendingProducts() {
+  const settings = await getTrendingSettings()
+
+  const limit = parsePositiveInt(settings.limit, DEFAULT_TRENDING_SETTINGS.limit)
+  const bestSellerDays = parsePositiveInt(
+    settings.bestSellerDays,
+    DEFAULT_TRENDING_SETTINGS.bestSellerDays
+  )
+
+  let mode = settings.mode
+  let products = []
+
+  if (mode === "manual") {
+    products = await getManualTrendingProducts(limit)
+  } else if (mode === "newest") {
+    products = await getNewestTrendingProducts(limit)
+  } else if (mode === "best_sellers") {
+    products = await getBestSellerTrendingProducts(limit, bestSellerDays)
+
+    if (!products.length) {
+      products = await getNewestTrendingProducts(limit)
+    }
+  } else {
+    mode = DEFAULT_TRENDING_SETTINGS.mode
+    products = await getManualTrendingProducts(limit)
+  }
+
+  return {
+    settings: {
+      ...settings,
+      mode,
+      limit,
+      bestSellerDays,
+    },
+    products,
+  }
+}
+
 app.get("/", (req, res) => {
   res.json({ message: "API działa" })
 })
@@ -254,6 +422,86 @@ app.post("/admin/login", async (req, res) => {
   } catch (error) {
     console.error("POST /admin/login error:", error)
     res.status(500).json({ error: "Błąd logowania" })
+  }
+})
+
+/* =========================
+   TRENDING SETTINGS
+========================= */
+
+app.get("/trending-settings", async (req, res) => {
+  try {
+    const settings = await getTrendingSettings()
+    res.json(normalizeTrendingSettings(settings))
+  } catch (error) {
+    console.error("GET /trending-settings error:", error)
+    res.status(500).json({ error: "Błąd pobierania ustawień trendingu" })
+  }
+})
+
+app.put("/trending-settings", authMiddleware, async (req, res) => {
+  try {
+    const { mode, limit, bestSellerDays } = req.body
+
+    const currentSettings = await getTrendingSettings()
+
+    let nextMode = currentSettings.mode
+    let nextLimit = currentSettings.limit
+    let nextBestSellerDays = currentSettings.bestSellerDays
+
+    if (mode !== undefined) {
+      if (!ALLOWED_TRENDING_MODES.includes(mode)) {
+        return res.status(400).json({
+          error: "Nieprawidłowy tryb trendingu",
+        })
+      }
+
+      nextMode = mode
+    }
+
+    if (limit !== undefined) {
+      const parsedLimit = parsePositiveInt(limit, null)
+
+      if (!parsedLimit) {
+        return res.status(400).json({
+          error: "Limit musi być liczbą większą od 0",
+        })
+      }
+
+      nextLimit = parsedLimit
+    }
+
+    if (bestSellerDays !== undefined) {
+      const parsedBestSellerDays = parsePositiveInt(bestSellerDays, null)
+
+      if (!parsedBestSellerDays) {
+        return res.status(400).json({
+          error: "Liczba dni musi być liczbą większą od 0",
+        })
+      }
+
+      nextBestSellerDays = parsedBestSellerDays
+    }
+
+    const updatedSettings = await prisma.trendingSettings.upsert({
+      where: { id: DEFAULT_TRENDING_SETTINGS.id },
+      update: {
+        mode: nextMode,
+        limit: nextLimit,
+        bestSellerDays: nextBestSellerDays,
+      },
+      create: {
+        id: DEFAULT_TRENDING_SETTINGS.id,
+        mode: nextMode,
+        limit: nextLimit,
+        bestSellerDays: nextBestSellerDays,
+      },
+    })
+
+    res.json(normalizeTrendingSettings(updatedSettings))
+  } catch (error) {
+    console.error("PUT /trending-settings error:", error)
+    res.status(500).json({ error: "Błąd zapisu ustawień trendingu" })
   }
 })
 
@@ -349,20 +597,8 @@ app.get("/products", async (req, res) => {
 
 app.get("/products/trending", async (req, res) => {
   try {
-    const products = await prisma.product.findMany({
-      where: {
-        isTrending: true,
-      },
-      include: {
-        images: true,
-        category: true,
-      },
-      orderBy: {
-        id: "desc",
-      },
-    })
-
-    res.json(products.map((product) => normalizeProduct(product, req)))
+    const result = await resolveTrendingProducts()
+    res.json(result.products.map((product) => normalizeProduct(product, req)))
   } catch (error) {
     console.error("GET /products/trending error:", error)
     res.status(500).json({ error: "Błąd pobierania trendujących produktów" })

@@ -7,6 +7,8 @@ import {
   normalizeOrders,
   normalizeProducts,
   removeToken,
+  getTrendingSettings,
+  updateTrendingSettings,
 } from "./adminApi";
 import LoginForm from "./components/LoginForm";
 import Sidebar from "./components/Sidebar";
@@ -29,6 +31,8 @@ export default function AdminPanel() {
   const [productLoading, setProductLoading] = useState(false);
   const [categoryLoading, setCategoryLoading] = useState(false);
   const [ordersLoading, setOrdersLoading] = useState(false);
+  const [trendingLoading, setTrendingLoading] = useState(false);
+  const [trendingSaving, setTrendingSaving] = useState(false);
 
   const [editingProduct, setEditingProduct] = useState(null);
   const [editingCategory, setEditingCategory] = useState(null);
@@ -36,6 +40,13 @@ export default function AdminPanel() {
 
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
+  const [trendingError, setTrendingError] = useState("");
+
+  const [trendingForm, setTrendingForm] = useState({
+    mode: "manual",
+    limit: 8,
+    bestSellerDays: 7,
+  });
 
   function changeSection(section) {
     setCurrentSection(section);
@@ -79,9 +90,29 @@ export default function AdminPanel() {
     }
   }
 
+  async function loadTrendingSettings() {
+    setTrendingLoading(true);
+    setTrendingError("");
+
+    try {
+      const settings = await getTrendingSettings();
+
+      setTrendingForm({
+        mode: settings?.mode || "manual",
+        limit: Number(settings?.limit || 8),
+        bestSellerDays: Number(settings?.bestSellerDays || 7),
+      });
+    } catch (err) {
+      setTrendingError(err.message || "Nie udało się pobrać ustawień trendingu.");
+    } finally {
+      setTrendingLoading(false);
+    }
+  }
+
   useEffect(() => {
     if (!loggedIn) return;
     loadBaseData();
+    loadTrendingSettings();
   }, [loggedIn]);
 
   useEffect(() => {
@@ -202,6 +233,31 @@ export default function AdminPanel() {
     }
   }
 
+  async function handleSaveTrendingSettings(event) {
+    event.preventDefault();
+
+    setTrendingSaving(true);
+    setTrendingError("");
+    setSuccess("");
+    setError("");
+
+    try {
+      const payload = {
+        mode: trendingForm.mode,
+        limit: Number(trendingForm.limit),
+        bestSellerDays: Number(trendingForm.bestSellerDays),
+      };
+
+      await updateTrendingSettings(payload);
+      setSuccess("Ustawienia trendingu zostały zapisane.");
+      await loadTrendingSettings();
+    } catch (err) {
+      setTrendingError(err.message || "Nie udało się zapisać ustawień trendingu.");
+    } finally {
+      setTrendingSaving(false);
+    }
+  }
+
   function handleLogout() {
     removeToken();
     setLoggedIn(false);
@@ -213,6 +269,7 @@ export default function AdminPanel() {
     setSuccess("");
     setError("");
     setOrdersError("");
+    setTrendingError("");
   }
 
   if (!loggedIn) {
@@ -233,11 +290,153 @@ export default function AdminPanel() {
         {pageLoading ? <div className="admin-loading">Ładowanie danych...</div> : null}
 
         {currentSection === "products" ? (
-          <ProductsPage
-            products={products}
-            categories={categories}
-            onOpenEdit={setEditingProduct}
-          />
+          <>
+            <section
+              style={{
+                background: "#fff",
+                border: "1px solid #e5e7eb",
+                borderRadius: "12px",
+                padding: "20px",
+                marginBottom: "20px",
+              }}
+            >
+              <h2 style={{ marginTop: 0, marginBottom: "16px" }}>
+                Ustawienia trendingu
+              </h2>
+
+              {trendingError ? (
+                <div
+                  style={{
+                    marginBottom: "12px",
+                    padding: "10px 12px",
+                    borderRadius: "8px",
+                    background: "#fee2e2",
+                    color: "#991b1b",
+                  }}
+                >
+                  {trendingError}
+                </div>
+              ) : null}
+
+              {trendingLoading ? (
+                <div>Ładowanie ustawień trendingu...</div>
+              ) : (
+                <form onSubmit={handleSaveTrendingSettings}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                      gap: "16px",
+                    }}
+                  >
+                    <label style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <span>Tryb trendingu</span>
+                      <select
+                        value={trendingForm.mode}
+                        onChange={(e) =>
+                          setTrendingForm((prev) => ({
+                            ...prev,
+                            mode: e.target.value,
+                          }))
+                        }
+                        style={{
+                          padding: "10px 12px",
+                          borderRadius: "8px",
+                          border: "1px solid #d1d5db",
+                        }}
+                      >
+                        <option value="manual">Manual</option>
+                        <option value="best_sellers">Best sellers</option>
+                        <option value="newest">Newest</option>
+                      </select>
+                    </label>
+
+                    <label style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <span>Limit produktów</span>
+                      <input
+                        type="number"
+                        min="1"
+                        value={trendingForm.limit}
+                        onChange={(e) =>
+                          setTrendingForm((prev) => ({
+                            ...prev,
+                            limit: e.target.value,
+                          }))
+                        }
+                        style={{
+                          padding: "10px 12px",
+                          borderRadius: "8px",
+                          border: "1px solid #d1d5db",
+                        }}
+                      />
+                    </label>
+
+                    <label style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      <span>Liczba dni dla best sellers</span>
+                      <input
+                        type="number"
+                        min="1"
+                        value={trendingForm.bestSellerDays}
+                        onChange={(e) =>
+                          setTrendingForm((prev) => ({
+                            ...prev,
+                            bestSellerDays: e.target.value,
+                          }))
+                        }
+                        disabled={trendingForm.mode !== "best_sellers"}
+                        style={{
+                          padding: "10px 12px",
+                          borderRadius: "8px",
+                          border: "1px solid #d1d5db",
+                          background:
+                            trendingForm.mode !== "best_sellers" ? "#f3f4f6" : "#fff",
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: "16px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "12px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <button
+                      type="submit"
+                      disabled={trendingSaving}
+                      style={{
+                        padding: "10px 16px",
+                        border: "none",
+                        borderRadius: "8px",
+                        background: "#111827",
+                        color: "#fff",
+                        cursor: trendingSaving ? "not-allowed" : "pointer",
+                        opacity: trendingSaving ? 0.7 : 1,
+                      }}
+                    >
+                      {trendingSaving ? "Zapisywanie..." : "Zapisz ustawienia trendingu"}
+                    </button>
+
+                    <div style={{ color: "#6b7280", fontSize: "14px" }}>
+                      Tryb <strong>manual</strong> używa checkboxa trending w produktach.
+                      Tryb <strong>best sellers</strong> bierze najlepiej sprzedające się
+                      produkty z ostatnich dni, a gdy nie ma sprzedaży, automatycznie
+                      przełącza wynik na <strong>newest</strong>.
+                    </div>
+                  </div>
+                </form>
+              )}
+            </section>
+
+            <ProductsPage
+              products={products}
+              categories={categories}
+              onOpenEdit={setEditingProduct}
+            />
+          </>
         ) : null}
 
         {currentSection === "add-product" ? (

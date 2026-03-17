@@ -27,13 +27,13 @@ model Product {
   price       Float
   categoryId  Int
   isTrending  Boolean        @default(false)
+  createdAt   DateTime       @default(now())
 
   category    Category       @relation(fields: [categoryId], references: [id])
   tags        ProductTag[]
   orderItems  OrderItem[]
   images      ProductImage[]
 }
-
 
 model ProductImage {
   id        Int     @id @default(autoincrement())
@@ -76,4 +76,13 @@ model OrderItem {
 
   order   Order   @relation(fields: [orderId], references: [id])
   product Product @relation(fields: [productId], references: [id])
+}
+
+model TrendingSettings {
+  id             Int      @id
+  mode           String   @default("manual")
+  limit          Int      @default(8)
+  bestSellerDays Int      @default(7)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }

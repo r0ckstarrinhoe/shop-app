@@ -133,3 +133,21 @@ export function getInitialSection() {
 
   return "products";
 }
+
+/* =========================
+   TRENDING SETTINGS
+========================= */
+
+export async function getTrendingSettings() {
+  return apiFetch("/trending-settings");
+}
+
+export async function updateTrendingSettings(data) {
+  return apiFetch("/trending-settings", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+}
