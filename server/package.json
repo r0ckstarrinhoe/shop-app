@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Backend sklepu online",
   "main": "server.js",
-  "type": "module",
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
