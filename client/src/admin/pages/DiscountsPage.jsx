@@ -106,17 +106,13 @@ export default function DiscountsPage({
             <tbody>
               {discounts.map((discount) => (
                 <tr key={discount.id}>
-                  <td>
-                    <span className={isDiscountInactive(discount) ? "admin-text-strike" : ""}>
-                      {discount.name}
-                    </span>
-                  </td>
+                  <td>{discount.name}</td>
                   <td>{discount.code || "-"}</td>
                   <td>{getScopeLabel(discount)}</td>
                   <td>{discount.valueType === "PERCENT" ? "Procent" : "Kwota"}</td>
                   <td>{getValueLabel(discount)}</td>
                   <td>
-                    {discount.isActive ? (
+                    {!isDiscountInactive(discount) ? (
                       <span className="admin-badge-success">Aktywny</span>
                     ) : (
                       <span className="admin-badge-muted">Nieaktywny</span>

@@ -75,3 +75,10 @@
   text-decoration: line-through;
 }
 
+.admin-badge-success{
+  color: #16a34a;
+}
+
+.admin-badge-muted{
+  color: #dc2626;
+}
