@@ -66,3 +66,12 @@
 .admin-checkbox-row span {
   display: inline-block;
 }
+
+.admin-row-inactive {
+  opacity: 0.5;
+}
+
+.admin-text-strike {
+  text-decoration: line-through;
+}
+

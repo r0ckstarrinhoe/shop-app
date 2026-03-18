@@ -9,9 +9,8 @@ export default function Sidebar({ currentSection, onChangeSection, onLogout }) {
       <nav className="admin-sidebar-nav">
         <button
           type="button"
-          className={`admin-sidebar-link ${
-            currentSection === "products" ? "active" : ""
-          }`}
+          className={`admin-sidebar-link ${currentSection === "products" ? "active" : ""
+            }`}
           onClick={() => onChangeSection("products")}
         >
           Lista produktów
@@ -19,9 +18,8 @@ export default function Sidebar({ currentSection, onChangeSection, onLogout }) {
 
         <button
           type="button"
-          className={`admin-sidebar-link ${
-            currentSection === "add-product" ? "active" : ""
-          }`}
+          className={`admin-sidebar-link ${currentSection === "add-product" ? "active" : ""
+            }`}
           onClick={() => onChangeSection("add-product")}
         >
           Dodawanie produktów
@@ -29,9 +27,8 @@ export default function Sidebar({ currentSection, onChangeSection, onLogout }) {
 
         <button
           type="button"
-          className={`admin-sidebar-link ${
-            currentSection === "add-category" ? "active" : ""
-          }`}
+          className={`admin-sidebar-link ${currentSection === "add-category" ? "active" : ""
+            }`}
           onClick={() => onChangeSection("add-category")}
         >
           Dodawanie kategorii
@@ -39,9 +36,17 @@ export default function Sidebar({ currentSection, onChangeSection, onLogout }) {
 
         <button
           type="button"
-          className={`admin-sidebar-link ${
-            currentSection === "orders" ? "active" : ""
-          }`}
+          className={`admin-sidebar-link ${currentSection === "discounts" ? "active" : ""
+            }`}
+          onClick={() => onChangeSection("discounts")}
+        >
+          Rabaty
+        </button>
+
+        <button
+          type="button"
+          className={`admin-sidebar-link ${currentSection === "orders" ? "active" : ""
+            }`}
           onClick={() => onChangeSection("orders")}
         >
           Lista zamówień

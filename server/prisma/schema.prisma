@@ -73,12 +73,14 @@ model Discount {
   isActive      Boolean           @default(true)
   startsAt      DateTime?
   endsAt        DateTime?
+  usageLimit    Int?
+  usedCount     Int               @default(0)
   productId     Int?
   categoryId    Int?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
-  category      Category?         @relation(fields: [categoryId], references: [id])
-  product       Product?          @relation(fields: [productId], references: [id])
+  category      Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  product       Product?          @relation(fields: [productId], references: [id], onDelete: SetNull)
   orders        Order[]
 
   @@index([code, isActive])

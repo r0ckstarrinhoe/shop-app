@@ -4,20 +4,26 @@ import {
   getInitialSection,
   getToken,
   normalizeCategories,
+  normalizeDiscounts,
   normalizeOrders,
   normalizeProducts,
   removeToken,
   getTrendingSettings,
   updateTrendingSettings,
+  createDiscount,
+  updateDiscount,
+  deleteDiscount,
 } from "./adminApi";
 import LoginForm from "./components/LoginForm";
 import Sidebar from "./components/Sidebar";
 import EditProductModal from "./components/EditProductModal";
 import EditCategoryModal from "./components/EditCategoryModal";
+import EditDiscountModal from "./components/EditDiscountModal";
 import ProductsPage from "./pages/ProductsPage";
 import AddProductPage from "./pages/AddProductPage";
 import AddCategoryPage from "./pages/AddCategoryPage";
 import OrdersPage from "./pages/OrdersPage";
+import DiscountsPage from "./pages/DiscountsPage";
 import "./admin.css";
 
 export default function AdminPanel() {
@@ -27,6 +33,7 @@ export default function AdminPanel() {
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [discounts, setDiscounts] = useState([]);
 
   const [pageLoading, setPageLoading] = useState(false);
   const [productLoading, setProductLoading] = useState(false);
@@ -34,10 +41,14 @@ export default function AdminPanel() {
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [trendingLoading, setTrendingLoading] = useState(false);
   const [trendingSaving, setTrendingSaving] = useState(false);
+  const [discountLoading, setDiscountLoading] = useState(false);
 
   const [editingProduct, setEditingProduct] = useState(null);
   const [editingCategory, setEditingCategory] = useState(null);
+  const [editingDiscount, setEditingDiscount] = useState(null);
+
   const [ordersError, setOrdersError] = useState("");
+  const [discountError, setDiscountError] = useState("");
 
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
@@ -91,6 +102,21 @@ export default function AdminPanel() {
     }
   }
 
+  async function loadDiscounts() {
+    setDiscountLoading(true);
+    setDiscountError("");
+
+    try {
+      const discountsResponse = await apiFetch("/discounts");
+      setDiscounts(normalizeDiscounts(discountsResponse));
+    } catch (err) {
+      setDiscounts([]);
+      setDiscountError(err.message || "Nie udało się pobrać rabatów.");
+    } finally {
+      setDiscountLoading(false);
+    }
+  }
+
   async function loadTrendingSettings() {
     setTrendingLoading(true);
     setTrendingError("");
@@ -101,7 +127,7 @@ export default function AdminPanel() {
       setTrendingForm({
         mode: settings?.mode || "manual",
         limit: Number(settings?.limit || 8),
-        bestSellerDays: Number(settings?.bestSellerDays || 7),
+        bestSellerDays: Number(settings?.days || settings?.bestSellerDays || 7),
       });
     } catch (err) {
       setTrendingError(err.message || "Nie udało się pobrać ustawień trendingu.");
@@ -118,8 +144,13 @@ export default function AdminPanel() {
 
   useEffect(() => {
     if (!loggedIn) return;
+
     if (currentSection === "orders") {
       loadOrders();
+    }
+
+    if (currentSection === "discounts") {
+      loadDiscounts();
     }
   }, [currentSection, loggedIn]);
 
@@ -134,7 +165,7 @@ export default function AdminPanel() {
       formData.append("categoryId", productData.categoryId);
       formData.append("description", productData.description);
       formData.append("price", productData.price);
-      formData.append("trending", String(Boolean(productData.trending)));
+      formData.append("isTrending", String(Boolean(productData.isTrending)));
 
       productData.images.forEach((file) => {
         formData.append("images", file);
@@ -213,7 +244,8 @@ export default function AdminPanel() {
       formData.append("categoryId", productData.categoryId);
       formData.append("description", productData.description);
       formData.append("price", productData.price);
-      formData.append("trending", String(Boolean(productData.trending)));
+      formData.append("isTrending", String(Boolean(productData.isTrending)));
+      formData.append("replaceImages", String(Boolean(productData.replaceImages)));
 
       productData.images.forEach((file) => {
         formData.append("images", file);
@@ -234,6 +266,63 @@ export default function AdminPanel() {
     }
   }
 
+  async function handleCreateDiscount(discountData) {
+    setDiscountLoading(true);
+    setSuccess("");
+    setDiscountError("");
+    setError("");
+
+    try {
+      await createDiscount(discountData);
+      setSuccess("Rabat został dodany.");
+      setEditingDiscount(null);
+      await loadDiscounts();
+      changeSection("discounts");
+    } catch (err) {
+      setDiscountError(err.message || "Nie udało się dodać rabatu.");
+    } finally {
+      setDiscountLoading(false);
+    }
+  }
+
+  async function handleUpdateDiscount(discountId, discountData) {
+    setDiscountLoading(true);
+    setSuccess("");
+    setDiscountError("");
+    setError("");
+
+    try {
+      await updateDiscount(discountId, discountData);
+      setSuccess("Rabat został zaktualizowany.");
+      setEditingDiscount(null);
+      await loadDiscounts();
+    } catch (err) {
+      setDiscountError(err.message || "Nie udało się zaktualizować rabatu.");
+    } finally {
+      setDiscountLoading(false);
+    }
+  }
+
+  async function handleDeleteDiscount(discountId) {
+    const confirmed = window.confirm("Na pewno usunąć ten rabat?");
+    if (!confirmed) return;
+
+    setDiscountLoading(true);
+    setSuccess("");
+    setDiscountError("");
+    setError("");
+
+    try {
+      await deleteDiscount(discountId);
+      setSuccess("Rabat został usunięty.");
+      await loadDiscounts();
+    } catch (err) {
+      setDiscountError(err.message || "Nie udało się usunąć rabatu.");
+    } finally {
+      setDiscountLoading(false);
+    }
+  }
+
   async function handleSaveTrendingSettings(event) {
     event.preventDefault();
 
@@ -246,7 +335,7 @@ export default function AdminPanel() {
       const payload = {
         mode: trendingForm.mode,
         limit: Number(trendingForm.limit),
-        bestSellerDays: Number(trendingForm.bestSellerDays),
+        days: Number(trendingForm.bestSellerDays),
       };
 
       await updateTrendingSettings(payload);
@@ -265,12 +354,15 @@ export default function AdminPanel() {
     setCategories([]);
     setProducts([]);
     setOrders([]);
+    setDiscounts([]);
     setEditingProduct(null);
     setEditingCategory(null);
+    setEditingDiscount(null);
     setSuccess("");
     setError("");
     setOrdersError("");
     setTrendingError("");
+    setDiscountError("");
   }
 
   if (!loggedIn) {
@@ -412,7 +504,7 @@ export default function AdminPanel() {
                         padding: "10px 16px",
                         border: "none",
                         borderRadius: "8px",
-                        background: "#111827",
+                        background: "#4f46e5",
                         color: "#fff",
                         cursor: trendingSaving ? "not-allowed" : "pointer",
                         opacity: trendingSaving ? 0.7 : 1,
@@ -464,6 +556,19 @@ export default function AdminPanel() {
             endpointError={ordersError}
           />
         ) : null}
+
+        {currentSection === "discounts" ? (
+          <DiscountsPage
+            discounts={discounts}
+            products={products}
+            categories={categories}
+            loading={discountLoading}
+            error={discountError}
+            onOpenCreate={() => setEditingDiscount({})}
+            onOpenEdit={setEditingDiscount}
+            onDelete={handleDeleteDiscount}
+          />
+        ) : null}
       </main>
 
       <EditProductModal
@@ -481,6 +586,16 @@ export default function AdminPanel() {
         loading={categoryLoading}
         onClose={() => setEditingCategory(null)}
         onSave={handleUpdateCategory}
+      />
+
+      <EditDiscountModal
+        open={Boolean(editingDiscount)}
+        discount={editingDiscount}
+        products={products}
+        categories={categories}
+        loading={discountLoading}
+        onClose={() => setEditingDiscount(null)}
+        onSave={editingDiscount?.id ? handleUpdateDiscount : handleCreateDiscount}
       />
     </div>
   );

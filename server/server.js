@@ -83,9 +83,9 @@ function serializeProduct(product) {
     updatedAt: product.updatedAt,
     category: product.category
       ? {
-          id: product.category.id,
-          name: product.category.name,
-        }
+        id: product.category.id,
+        name: product.category.name,
+      }
       : null,
     images,
     image: images[0]?.url || null,
@@ -107,6 +107,12 @@ function serializeDiscount(discount) {
     isActive: discount.isActive,
     startsAt: discount.startsAt,
     endsAt: discount.endsAt,
+    usageLimit: discount.usageLimit,
+    usedCount: discount.usedCount,
+    remainingUses:
+      discount.usageLimit !== null && discount.usageLimit !== undefined
+        ? Math.max(0, Number(discount.usageLimit) - Number(discount.usedCount || 0))
+        : null,
     productId: discount.productId,
     categoryId: discount.categoryId,
     product: discount.product
@@ -154,6 +160,17 @@ function isDiscountCurrentlyValid(discount) {
 
   if (discount.endsAt && now > discount.endsAt) {
     return { valid: false, message: "Kod rabatowy wygasł." };
+  }
+
+  if (
+    discount.usageLimit !== null &&
+    discount.usageLimit !== undefined &&
+    Number(discount.usedCount || 0) >= Number(discount.usageLimit)
+  ) {
+    return {
+      valid: false,
+      message: "Kod rabatowy osiągnął limit użyć.",
+    };
   }
 
   return { valid: true };
@@ -1114,77 +1131,34 @@ app.get("/discounts/:id", async (req, res) => {
   }
 });
 
-app.post("/discounts", async (req, res) => {
-  try {
-    let {
-      name,
-      code,
-      scope,
-      valueType,
-      value,
-      productId,
-      categoryId,
-      startsAt,
-      endsAt,
-      isActive,
-    } = req.body;
+function isDiscountCurrentlyValid(discount) {
+  const now = new Date();
 
-    code = normalizeCode(code);
-
-    if (!name || !scope || !valueType || value === undefined || value === null) {
-      return res.status(400).json({ message: "Brak wymaganych pól." });
-    }
-
-    if (valueType === "PERCENT" && (Number(value) <= 0 || Number(value) > 100)) {
-      return res.status(400).json({ message: "Procent musi być w zakresie 1-100." });
-    }
-
-    if (valueType === "FIXED" && Number(value) <= 0) {
-      return res.status(400).json({ message: "Kwota musi być większa od 0." });
-    }
-
-    if (valueType === "FIXED" && scope === "GLOBAL") {
-      return res.status(400).json({ message: "Rabaty kwotowe nie mogą być globalne." });
-    }
-
-    if (scope === "PRODUCT" && !productId) {
-      return res.status(400).json({ message: "Dla PRODUCT wymagane jest productId." });
-    }
-
-    if (scope === "CATEGORY" && !categoryId) {
-      return res.status(400).json({ message: "Dla CATEGORY wymagane jest categoryId." });
-    }
-
-    if (scope === "GLOBAL") {
-      productId = null;
-      categoryId = null;
-    }
-
-    if (startsAt && endsAt && new Date(startsAt) > new Date(endsAt)) {
-      return res.status(400).json({ message: "Niepoprawny zakres dat." });
-    }
-
-    const discount = await prisma.discount.create({
-      data: {
-        name: String(name).trim(),
-        code,
-        scope,
-        valueType,
-        value: Number(value),
-        productId: productId ? Number(productId) : null,
-        categoryId: categoryId ? Number(categoryId) : null,
-        startsAt: startsAt ? new Date(startsAt) : null,
-        endsAt: endsAt ? new Date(endsAt) : null,
-        isActive: isActive !== undefined ? parseBoolean(isActive) : true,
-      },
-    });
-
-    res.status(201).json(discount);
-  } catch (error) {
-    console.error("CREATE DISCOUNT ERROR:", error);
-    res.status(500).json({ message: "Błąd tworzenia rabatu." });
+  if (!discount.isActive) {
+    return { valid: false, message: "Kod rabatowy jest nieaktywny." };
   }
-});
+
+  if (discount.startsAt && now < discount.startsAt) {
+    return { valid: false, message: "Kod rabatowy nie jest jeszcze aktywny." };
+  }
+
+  if (discount.endsAt && now > discount.endsAt) {
+    return { valid: false, message: "Kod rabatowy wygasł." };
+  }
+
+  if (
+    discount.usageLimit !== null &&
+    discount.usageLimit !== undefined &&
+    Number(discount.usedCount || 0) >= Number(discount.usageLimit)
+  ) {
+    return {
+      valid: false,
+      message: "Kod rabatowy osiągnął limit użyć.",
+    };
+  }
+
+  return { valid: true };
+}
 
 app.put("/discounts/:id", async (req, res) => {
   try {
@@ -1201,6 +1175,7 @@ app.put("/discounts/:id", async (req, res) => {
       startsAt,
       endsAt,
       isActive,
+      usageLimit,
     } = req.body;
 
     if (code !== undefined) {
@@ -1249,10 +1224,18 @@ app.put("/discounts/:id", async (req, res) => {
         startsAt: startsAt ? new Date(startsAt) : null,
         endsAt: endsAt ? new Date(endsAt) : null,
         isActive: isActive !== undefined ? parseBoolean(isActive) : undefined,
+        usageLimit:
+          usageLimit !== undefined && usageLimit !== null && usageLimit !== ""
+            ? Number(usageLimit)
+            : null,
+      },
+      include: {
+        product: true,
+        category: true,
       },
     });
 
-    res.json(discount);
+    res.json(serializeDiscount(discount));
   } catch (error) {
     console.error("UPDATE DISCOUNT ERROR:", error);
     res.status(500).json({ message: "Błąd aktualizacji rabatu." });
