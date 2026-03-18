@@ -56,7 +56,7 @@ export default function AdminPanel() {
 
   const [trendingForm, setTrendingForm] = useState({
     mode: "manual",
-    limit: 8,
+    limit: 5,
     bestSellerDays: 7,
   });
 
