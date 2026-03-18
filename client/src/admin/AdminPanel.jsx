@@ -18,6 +18,7 @@ import ProductsPage from "./pages/ProductsPage";
 import AddProductPage from "./pages/AddProductPage";
 import AddCategoryPage from "./pages/AddCategoryPage";
 import OrdersPage from "./pages/OrdersPage";
+import "./admin.css";
 
 export default function AdminPanel() {
   const [loggedIn, setLoggedIn] = useState(Boolean(getToken()));

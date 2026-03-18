@@ -1,279 +1,178 @@
 import { useEffect, useState } from "react";
 import {
-  updateProduct,
-  getProductImages,
   getImageUrl,
   getProductCategoryId,
+  getProductImages,
 } from "../adminApi";
 
 export default function EditProductModal({
+  open,
   product,
-  categories = [],
+  categories,
+  loading,
   onClose,
-  onSaved,
+  onSave,
 }) {
-  const [form, setForm] = useState({
-    name: "",
-    description: "",
-    price: "",
-    categoryId: "",
-    isTrending: false,
-    images: [],
-    replaceImages: false,
-  });
-
-  const [existingImages, setExistingImages] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [name, setName] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [description, setDescription] = useState("");
+  const [price, setPrice] = useState("");
+  const [images, setImages] = useState([]);
+  const [isTrending, setIsTrending] = useState(false);
+  const [replaceImages, setReplaceImages] = useState(false);
 
   useEffect(() => {
     if (!product) return;
 
-    setForm({
-      name: product.name || "",
-      description: product.description || "",
-      price:
-        product.price !== undefined && product.price !== null
-          ? String(product.price)
-          : "",
-      categoryId: getProductCategoryId(product),
-      isTrending: Boolean(product.isTrending),
-      images: [],
-      replaceImages: false,
-    });
-
-    setExistingImages(getProductImages(product));
-    setError("");
+    setName(product.name || "");
+    setCategoryId(getProductCategoryId(product));
+    setDescription(product.description || "");
+    setPrice(product.price != null ? String(product.price) : "");
+    setImages([]);
+    setIsTrending(Boolean(product.isTrending));
+    setReplaceImages(false);
   }, [product]);
 
-  function handleChange(e) {
-    const { name, value, type, checked, files } = e.target;
-
-    if (type === "checkbox") {
-      setForm((prev) => ({
-        ...prev,
-        [name]: checked,
-      }));
-      return;
-    }
-
-    if (type === "file") {
-      setForm((prev) => ({
-        ...prev,
-        images: Array.from(files || []),
-      }));
-      return;
-    }
-
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  }
+  if (!open || !product) return null;
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!product?.id) return;
 
-    setLoading(true);
-    setError("");
-
-    try {
-      const payload = {
-        name: form.name.trim(),
-        description: form.description.trim(),
-        price: form.price,
-        categoryId: form.categoryId,
-        isTrending: Boolean(form.isTrending),
-        images: form.images,
-        replaceImages: Boolean(form.replaceImages),
-      };
-
-      const updated = await updateProduct(product.id, payload);
-
-      if (onSaved) {
-        await onSaved(updated);
-      } else if (onClose) {
-        onClose();
-      }
-    } catch (err) {
-      setError(err.message || "Nie udało się zapisać produktu.");
-    } finally {
-      setLoading(false);
-    }
+    await onSave(product.id, {
+      name: name.trim(),
+      categoryId,
+      description: description.trim(),
+      price,
+      images,
+      isTrending: Boolean(isTrending),
+      replaceImages: Boolean(replaceImages),
+    });
   }
 
-  if (!product) return null;
+  const productImages = getProductImages(product);
 
   return (
-    <div className="admin-modal-overlay">
-      <div className="admin-modal">
+    <div className="admin-modal-backdrop" onClick={onClose}>
+      <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
         <div className="admin-modal-header">
-          <div>
-            <h2>Edytuj produkt</h2>
-            <p>Zmień dane produktu i zapisz zmiany.</p>
-          </div>
-
-          <button
-            type="button"
-            className="admin-modal-close"
-            onClick={onClose}
-            disabled={loading}
-          >
+          <h2>Edytuj produkt</h2>
+          <button type="button" className="admin-modal-close" onClick={onClose}>
             ×
           </button>
         </div>
 
-        {error ? <div className="admin-error-box">{error}</div> : null}
-
-        <form className="admin-form" onSubmit={handleSubmit}>
-          <div className="admin-form-grid">
-            <label className="admin-form-field">
-              <span>Nazwa produktu</span>
-              <input
-                type="text"
-                name="name"
-                value={form.name}
-                onChange={handleChange}
-                required
-              />
-            </label>
-
-            <label className="admin-form-field">
-              <span>Cena</span>
-              <input
-                type="number"
-                name="price"
-                step="0.01"
-                min="0"
-                value={form.price}
-                onChange={handleChange}
-                required
-              />
-            </label>
-
-            <label className="admin-form-field">
-              <span>Kategoria</span>
-              <select
-                name="categoryId"
-                value={form.categoryId}
-                onChange={handleChange}
-                required
-              >
-                <option value="">Wybierz kategorię</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={String(category.id)}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="admin-form-field admin-form-field-checkbox">
-              <input
-                type="checkbox"
-                name="isTrending"
-                checked={Boolean(form.isTrending)}
-                onChange={handleChange}
-              />
-              <span>Produkt trendujący (manual)</span>
-            </label>
-          </div>
-
-          <label className="admin-form-field">
-            <span>Opis</span>
-            <textarea
-              name="description"
-              value={form.description}
-              onChange={handleChange}
-              rows={5}
+        <form onSubmit={handleSubmit} className="admin-form">
+          <div className="admin-field">
+            <label>Nazwa produktu</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               required
             />
-          </label>
+          </div>
 
-          {existingImages.length > 0 ? (
-            <div className="admin-form-field">
-              <span>Obecne zdjęcia</span>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
-                  gap: "12px",
-                  marginTop: "10px",
-                }}
-              >
-                {existingImages.map((image, index) => (
-                  <div
-                    key={`${index}-${typeof image === "string" ? image : image?.filename || "img"}`}
-                    style={{
-                      border: "1px solid #e5e7eb",
-                      borderRadius: "10px",
-                      overflow: "hidden",
-                      background: "#fff",
-                    }}
-                  >
-                    <img
-                      src={getImageUrl(image)}
-                      alt={`Zdjęcie ${index + 1}`}
-                      style={{
-                        width: "100%",
-                        height: "120px",
-                        objectFit: "cover",
-                        display: "block",
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
+          <div className="admin-field">
+            <label>Kategoria</label>
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              required
+            >
+              <option value="">Wybierz kategorię</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          <label className="admin-form-field">
-            <span>Nowe zdjęcia</span>
+          <div className="admin-field">
+            <label>Opis</label>
+            <textarea
+              rows="5"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="admin-field">
+            <label>Cena</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="admin-field">
+              <label className="admin-checkbox-row">
+                <span>Produkt trendujący (manual)</span>
+
+                <input
+                  type="checkbox"
+                  checked={isTrending}
+                  onChange={(e) => setIsTrending(e.target.checked)}
+                  id="isTrending"
+                />
+              </label>
+          </div>
+
+          <div className="admin-field">
+            <label>Dodaj nowe zdjęcia</label>
             <input
               type="file"
-              name="images"
               multiple
               accept="image/*"
-              onChange={handleChange}
+              onChange={(e) => setImages(Array.from(e.target.files || []))}
             />
-          </label>
+            <small>
+              Możesz zostawić puste, jeśli nie chcesz dodawać nowych zdjęć.
+            </small>
+          </div>
 
-          <label className="admin-form-field admin-form-field-checkbox">
-            <input
-              type="checkbox"
-              name="replaceImages"
-              checked={Boolean(form.replaceImages)}
-              onChange={handleChange}
-            />
-            <span>Zastąp obecne zdjęcia nowymi</span>
-          </label>
+          {productImages.length > 0 ? (
+            <div className="admin-field">
+              <label>Obecne zdjęcia</label>
+              <div className="admin-image-grid">
+                {productImages.map((image, index) => {
+                  const src = getImageUrl(image);
 
-          {form.images.length > 0 ? (
-            <div className="admin-form-field">
-              <span>Wybrane pliki</span>
-              <div className="admin-file-list">
-                {form.images.map((file, index) => (
-                  <div key={`${file.name}-${index}`} className="admin-file-item">
-                    {file.name}
-                  </div>
-                ))}
+                  return (
+                    <div className="admin-image-item" key={index}>
+                      {src ? <img src={src} alt={`product-${index}`} /> : null}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ) : null}
 
-          <div className="admin-form-actions">
-            <button type="submit" disabled={loading}>
-              {loading ? "Zapisywanie..." : "Zapisz zmiany"}
-            </button>
+          {productImages.length > 0 ? (
+            <div className="admin-field">
+              <label className="admin-checkbox-row">
+                <span>Zastąp obecne zdjęcia nowymi</span>
 
-            <button
-              type="button"
-              className="admin-button-secondary"
-              onClick={onClose}
-              disabled={loading}
-            >
+                <input
+                  type="checkbox"
+                  checked={replaceImages}
+                  onChange={(e) => setReplaceImages(e.target.checked)}
+                />
+              </label>
+            </div>
+          ) : null}
+
+          <div className="admin-modal-actions">
+            <button type="button" className="admin-btn ghost" onClick={onClose}>
               Anuluj
+            </button>
+            <button type="submit" className="admin-btn primary" disabled={loading}>
+              {loading ? "Zapisywanie..." : "Zapisz zmiany"}
             </button>
           </div>
         </form>
